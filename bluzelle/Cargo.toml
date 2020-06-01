@@ -5,3 +5,14 @@ authors = ["vb <vbstreetz@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+reqwest = { version = "0.10", features = ["blocking", "json"] }
+json = "*"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+failure = "*"
+secp256k1 = "*"
+hex = "*"
+base64 = "*"
+sha2 = "*"
+unicode-reverse = "*"

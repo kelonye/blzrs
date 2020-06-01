@@ -6,3 +6,5 @@ edition = "2018"
 
 [dependencies]
 bluzelle = { path = "../bluzelle" }
+dotenv = "*"
+tokio = { version = "0.2", features = ["full"] }
