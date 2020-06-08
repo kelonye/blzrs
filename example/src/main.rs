@@ -4,6 +4,7 @@ extern crate dotenv;
 use dotenv::dotenv;
 use std::env;
 use std::error::Error;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -17,7 +18,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid, debug).await?;
 
-    let key: &str = "1590919018y";
+    let now = SystemTime::now();
+    let since_the_epoch = now.duration_since(UNIX_EPOCH)?;
+    let key: &str = &format!("rust-{}", since_the_epoch.as_secs());
     let value: &str = "value";
 
     // println!("account");

@@ -11,7 +11,7 @@ Ensure you have a recent version of [Rust](https://www.rust-lang.org/) installed
 bluzelle = { git = "https://github.com/vbstreetz/blzrs" }
 ```
 
-4. Use:
+2. Use:
 
 ```rust
 extern crate bluzelle;
@@ -20,8 +20,6 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    dotenv().ok();
-
     let mnemonic = "...";
     let endpoint = "...";
     let chain_id = "...";
@@ -32,6 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let key: &str = "key";
     let value: &str = "value";
+
     let gas_info = bluzelle::GasInfo::default();
     gas_info.max_fee = 4000001;
 

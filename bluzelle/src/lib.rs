@@ -5,18 +5,54 @@ extern crate reqwest;
 extern crate secp256k1;
 extern crate serde;
 extern crate sha2;
-extern crate unicode_reverse;
+extern crate bip39;
+// extern crate bech32;
+extern crate ripemd160;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 
+// use failure;
 use failure::Error;
 use json;
-use sha2::{Digest, Sha256, Sha512};
-use unicode_reverse::reverse_grapheme_clusters_in_place;
+use sha2::{Digest, Sha256};
+use hdwallet::{KeyChain, DefaultKeyChain, ExtendedPrivKey, ExtendedPubKey};
+// use std::fmt;
+// use std::fs::File;
+// use std::io;
+use bech32::{self, FromBase32, ToBase32};
+use ripemd160::{Ripemd160};
 
 const TOKEN_NAME: &str = "ubnt";
 const PUB_KEY_TYPE: &str = "tendermint/PubKeySecp256k1";
+const DEFAULT_ENDPOINT: &str = "http://localhost:1317";
+const DEFAULT_CHAIN_ID: &str = "bluzelle";
+const HD_PATH: &str = "m/44'/118'/0'/0/0";
+const ADDRESS_PREFIX: &str = "bluzelle";
+
+//
+
+// struct OptionError;
+
+// impl std::error::Error for OptionError {}
+
+// impl fmt::Display for OptionError {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "An Error Occurred, Please Try Again!") // user-facing output
+//     }
+// }
+
+// impl fmt::Debug for OptionError {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "{{ file: {}, line: {} }}", file!(), line!()) // programmer-facing output
+//     }
+// }
+
+// impl From<io::Error> for OptionError {
+//     fn from(error: io::Error) -> Self {
+//         OptionError {}
+//     }
+// }
 
 //
 
@@ -137,7 +173,8 @@ pub struct Client {
     pub uuid: String,
     pub debug: bool,
 
-    pub priv_key: String,
+    pub private_key_hex: String,
+    pub public_key_base_64: String,
     pub address: String,
     pub bluzelle_account: Account,
 }
@@ -224,10 +261,9 @@ impl Client {
 
         let mut pub_key = TxSigPubKey::default();
         pub_key.type_reserved = String::from(PUB_KEY_TYPE);
-        pub_key.value = String::from("A6ey15h5CRid3vxRdp8zfZGpsbCN9fPN7hRpSdxRoEa+");
+        pub_key.value = self.public_key_base_64.clone();
 
-        let priv_key = "94442e5b866840737b4d43e45e34efc0a773c4b20c6e3de224c35eae4c9b8c6c";
-        let priv_key_decoded = hex::decode(priv_key)?;
+        let priv_key_decoded = hex::decode(self.private_key_hex.clone())?;
         let secret_key = secp256k1::SecretKey::from_slice(&priv_key_decoded)?;
 
         let secp = secp256k1::Secp256k1::new();
@@ -283,24 +319,63 @@ pub async fn new_client(
     uuid: String,
     debug: bool,
 ) -> Result<Client, Error> {
-    let (priv_key, address) = derive_address(&mnemonic);
-    println!(
-        "mnemonic({}) endpoint({}) chain_id({}) uuid({}) debug({}) address({})",
-        mnemonic, endpoint, chain_id, uuid, debug, address
-    );
     let mut client = Client::default();
-    client.mnemonic = mnemonic;
+    client.mnemonic = mnemonic.clone();
     client.endpoint = endpoint;
-    client.chain_id = String::from("bluzelle");
+    if client.endpoint.is_empty() {
+        client.endpoint = String::from(DEFAULT_ENDPOINT);
+    }
+    client.chain_id = chain_id;
+    if client.chain_id.is_empty() {
+        client.chain_id = String::from(DEFAULT_CHAIN_ID);
+    }
     client.uuid = uuid;
-    client.address = String::from("bluzelle1upsfjftremwgxz3gfy0wf3xgvwpymqx754ssu9");
 
+    let (private_key_hex, public_key_base_64, address) = derive_address(&mnemonic.clone())?;
+    client.address = address;
+    client.private_key_hex = private_key_hex;
+    client.public_key_base_64 = public_key_base_64;
     client.bluzelle_account = client.account().await?;
+
     Ok(client)
 }
 
-fn derive_address(mnemonic: &str) -> (&str, &str) {
-    (mnemonic, "bluzelle1upsfjftremwgxz3gfy0wf3xgvwpymqx754ssu9")
+fn derive_address(mnemonic_word: &str) -> Result<(String, String, String), Error> {
+    let mnemonic = bip39::Mnemonic::from_phrase(mnemonic_word, bip39::Language::English)?;
+    let seed = bip39::Seed::new(&mnemonic, "");
+    let seed_bytes: &[u8] = seed.as_bytes();
+    let private_extended_key: ExtendedPrivKey;
+
+    match derive_private_key(&seed_bytes) {
+        Ok(pk) => private_extended_key = pk,
+        Err(e) => {
+            panic!("{:?}", e);
+        },
+    };
+
+    let private_key_hex = String::from(format!("{:x}", private_extended_key.private_key));
+    let public_extended_key = ExtendedPubKey::from_private_key(&private_extended_key);
+    let public_key_bytes = public_extended_key.public_key.serialize().to_vec();
+    let public_key_base_64 = base64::encode(&public_key_bytes);
+
+    let mut s_hasher = Sha256::new();
+    s_hasher.input(public_key_bytes);
+    let s = s_hasher.result();
+
+    let mut r_hasher = Ripemd160::new();
+    r_hasher.input(s);
+    let r = r_hasher.result();
+
+    let address = bech32::encode(ADDRESS_PREFIX, r.to_base32())?;
+
+    Ok((private_key_hex, public_key_base_64, address))
+}
+
+fn derive_private_key(seed: &[u8]) -> Result<ExtendedPrivKey, hdwallet::error::Error> {
+    let master_key = ExtendedPrivKey::with_seed(seed)?;
+    let key_chain = DefaultKeyChain::new(master_key);
+    let (extended_key, _derivation) = key_chain.derive_private_key(HD_PATH.into())?;
+    Ok(extended_key)
 }
 
 #[cfg(test)]
@@ -308,7 +383,7 @@ mod tests {
     use super::*;
     #[test]
     fn it_derives_address() {
-        let (_private_key, address) = derive_address("around buzz diagram captain obtain detail salon mango muffin brother morning jeans display attend knife carry green dwarf vendor hungry fan route pumpkin car");
+        let (_private_key_hex, _public_key_base_64, address) = derive_address("around buzz diagram captain obtain detail salon mango muffin brother morning jeans display attend knife carry green dwarf vendor hungry fan route pumpkin car").unwrap();
         assert_eq!(address, "bluzelle1upsfjftremwgxz3gfy0wf3xgvwpymqx754ssu9");
     }
 }
