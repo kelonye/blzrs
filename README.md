@@ -20,22 +20,25 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mnemonic = "...";
-    let endpoint = "...";
-    let chain_id = "...";
-    let uuid = "...";
+    let mnemonic = String::from("jelly practice...");
+    let endpoint = String::from("");
+    let chain_id = String::from("");
+    let uuid = String::from("my-app");
     let debug = false;
 
     let client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid, debug).await?;
 
-    let key: &str = "key";
-    let value: &str = "value";
+    let key = String::from("key");
+    let value = String::from("value");
 
-    let gas_info = bluzelle::GasInfo::default();
+    let mut gas_info = bluzelle::GasInfo::default();
     gas_info.max_fee = 4000001;
 
-    client.create(key, value, gas_info).await?;
+    let lease_info = bluzelle::LeaseInfo::default();
+
+    client.create(key, value, gas_info, lease_info).await?;
     let read_value = client.read(key).await?;
+    println!("val: {}", read_value);
 
     Ok(())
 }

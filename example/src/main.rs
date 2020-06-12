@@ -1,5 +1,7 @@
 extern crate bluzelle;
 extern crate dotenv;
+extern crate pretty_env_logger;
+#[macro_use] extern crate log;
 
 use dotenv::dotenv;
 use std::env;
@@ -8,32 +10,39 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    std::env::set_var("RUST_LOG", "bluzelle");
+
     dotenv().ok();
+    pretty_env_logger::init();
 
     let mnemonic = read_env(String::from("MNEMONIC"));
     let endpoint = read_env(String::from("ENDPOINT"));
     let chain_id = read_env(String::from("CHAIN_ID"));
     let uuid = read_env(String::from("UUID"));
-    let debug = read_env_bool(String::from("DEBUG"));
 
-    let client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid, debug).await?;
+    let client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
 
     let now = SystemTime::now();
     let since_the_epoch = now.duration_since(UNIX_EPOCH)?;
-    let key: &str = &format!("rust-{}", since_the_epoch.as_secs());
-    let value: &str = "value";
+    let key = String::from(format!("rust-{}", since_the_epoch.as_secs()));
+    let value = String::from("value");
 
-    // println!("account");
+    let mut gas_info = bluzelle::GasInfo::default();
+    gas_info.max_fee = 4000001;
+
+    let lease_info = bluzelle::LeaseInfo::default();
+
+    // info!("account");
     // let account = client.account().await?;
-    // println!("account({:?})", account);
+    // info!("account({:?})", account);
 
-    println!("creating key({})", key);
-    client.create(key, value).await?;
-    println!("created key({})", key);
+    info!("creating key({})", key.clone());
+    client.create(key.clone(), value, gas_info.clone(), lease_info).await?;
+    info!("created key({})", key.clone());
 
-    // println!("reading key({})", key);
+    // info!("reading key({})", key);
     // let value2 = client.read(key).await?;
-    // println!("read key({}) value({:?})", key, value2);
+    // info!("read key({}) value({:?})", key, value2);
 
     Ok(())
 }

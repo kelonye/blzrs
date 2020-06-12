@@ -22,6 +22,7 @@ use hdwallet::{KeyChain, DefaultKeyChain, ExtendedPrivKey, ExtendedPubKey};
 // use std::io;
 use bech32::{self, FromBase32, ToBase32};
 use ripemd160::{Ripemd160};
+use log::{info,warn,error};
 
 const TOKEN_NAME: &str = "ubnt";
 const PUB_KEY_TYPE: &str = "tendermint/PubKeySecp256k1";
@@ -29,6 +30,9 @@ const DEFAULT_ENDPOINT: &str = "http://localhost:1317";
 const DEFAULT_CHAIN_ID: &str = "bluzelle";
 const HD_PATH: &str = "m/44'/118'/0'/0/0";
 const ADDRESS_PREFIX: &str = "bluzelle";
+const BROADCAST_MAX_RETRIES: u64 = 10;
+// const BROADCAST_RETRY_INTERVAL = time.Second;
+const BLOCK_TIME_IN_SECONDS: u64 = 5;
 
 //
 
@@ -83,8 +87,30 @@ pub struct Coin {
 
 //
 
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+pub struct TxValidateRequest {
+    #[serde(rename = "BaseReq")]
+    base_req: TxValidateRequestBaseReq,
+    #[serde(rename = "Key")]
+    key: String,
+    #[serde(rename = "Lease")]
+    lease: String,
+    #[serde(rename = "Owner")]
+    owner: String,
+    #[serde(rename = "UUID")]
+    uuid: String,
+    #[serde(rename = "Value")]
+    value: String,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
+pub struct TxValidateRequestBaseReq {
+    from: String,
+    chain_id: String,
+}
+
 #[derive(Default, Serialize, Deserialize, Debug)]
-pub struct ValidateResponse {
+pub struct TxValidateResponse {
     value: Tx,
 }
 
@@ -146,13 +172,51 @@ pub struct TxSigPubKey {
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
-pub struct TxSigHashPayload {
+pub struct TxBroadcastRequest {
     account_number: String,
     chain_id: String,
     fee: TxFee,
     memo: String,
     msgs: Vec<TxMsg>,
     sequence: String,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug)]
+pub struct TxBroadcastResponse {
+	height: String,
+	txhash: String,
+	data: Option<String>,
+	codespace: Option<String>,
+	code: Option<u8>,
+	raw_log: String,
+	gas_wanted: String,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct GasInfo {
+    pub max_fee: u64,
+    pub max_gas: u64,
+    pub gas_price: u64,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct LeaseInfo {
+    pub days: u64,
+    pub hours: u64,
+    pub minutes: u64,
+    pub seconds: u64,
+}
+
+
+impl LeaseInfo {
+    fn to_blocks(&self) -> u64 {
+        let mut seconds  = 0;
+        seconds += self.days * 24 * 60 * 60;
+        seconds += self.hours * 60 * 60;
+        seconds += self.minutes * 60;
+        seconds += self.seconds;
+        seconds / BLOCK_TIME_IN_SECONDS
+    }
 }
 
 //
@@ -171,37 +235,60 @@ pub struct Client {
     pub endpoint: String,
     pub chain_id: String,
     pub uuid: String,
-    pub debug: bool,
 
-    pub private_key_hex: String,
-    pub public_key_base_64: String,
-    pub address: String,
-    pub bluzelle_account: Account,
+    private_key_hex: String,
+    public_key_base_64: String,
+    address: String,
+    bluzelle_account: Account,
 }
 
 impl Client {
-    pub async fn create(&self, key: &str, value: &str) -> Result<bool, Error> {
-        let body = json::object! {
-            BaseReq: {
-                chain_id: self.chain_id.to_string(),
-                from: self.address.to_string(),
-            },
-            Key: key,
-            Lease: String::from("0"),
-            Owner: self.address.to_string(),
-            UUID: self.uuid.to_string(),
-            Value: value,
+    pub async fn create(&self, key: String, value: String, gas_info: GasInfo, lease_info: LeaseInfo) -> Result<bool, Error> {
+        let mut tx = TxValidateRequest::default();
+        tx.key = key;
+        tx.lease = lease_info.to_blocks().to_string();
+        tx.value = value;
+        //
+        self.tx(String::from("POST"), String::from("/crud/create"), &mut tx, gas_info).await?;
+        Ok(true)
+    }
+
+    pub async fn tx_read(&self, key: String, gas_info: GasInfo) -> Result<String, Error> {
+        let mut tx = TxValidateRequest::default();
+        tx.key = key;
+        //
+        let response = self.tx(String::from("POST"), String::from("/crud/read"), &mut tx, gas_info).await?;
+        let value: String = serde_json::from_slice(&response)?;
+        Ok(value)
+    }
+
+    pub async fn tx(&self, method: String, endpoint: String, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
+        // self.broadcast_retries = 0;
+        let response = self.tx_validate(method, endpoint, tx).await?;
+        info!("res {:?}", response);
+        self.tx_broadcast(response, gas_info).await
+    }
+
+    pub async fn tx_validate(&self, method: String, endpoint: String, tx: &mut TxValidateRequest) -> Result<TxValidateResponse, Error> {
+        tx.base_req = TxValidateRequestBaseReq{
+            chain_id: self.chain_id.to_string(),
+            from: self.address.to_string(),
         };
-        println!("~~~~> {}", json::stringify(body.clone()));
-        let response: ValidateResponse = reqwest::Client::new()
-            .post(&format!("{}/crud/create", self.endpoint))
-            .body(json::stringify(body.clone()))
+        tx.owner = self.address.to_string();
+        tx.uuid = self.uuid.to_string();
+        let body = serde_json::to_string(&tx)?;
+        info!("~~~~> {}", body.clone());
+        let response: TxValidateResponse = reqwest::Client::new()
+            .post(&format!("{}/{}", self.endpoint, endpoint))
+            .body(body.clone())
             .send()
             .await?
             .json()
             .await?;
-        println!("res {:?}", response);
+        Ok(response)
+    }
 
+    pub async fn tx_broadcast(&self, response: TxValidateResponse, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
         let mut fee: TxFee = TxFee::default();
         fee.gas = response.value.fee.gas;
         let mut fee_amount = TxFeeAmount::default();
@@ -222,29 +309,49 @@ impl Client {
         tx.signatures = Vec::new();
         tx.signatures.push(sig);
         //
-        let mut tx_body = TxRequest::default();
-        tx_body.mode = String::from("block");
-        tx_body.tx = tx;
-        let body2 = serde_json::to_string(&tx_body)?;
-        println!("payload ---> {}", body2.clone());
-        let response2 = reqwest::Client::new()
+        let mut tx_request = TxRequest::default();
+        tx_request.mode = String::from("block");
+        tx_request.tx = tx;
+        //
+        let body = serde_json::to_string(&tx_request)?;
+        info!("payload ---> {}", body.clone());
+        let response: TxBroadcastResponse = reqwest::Client::new()
             .post(&format!("{}/txs", self.endpoint))
-            .json(&tx_body)
+            .body(body.clone())
             .send()
+            .await?
+            .json()
             .await?;
 
-        if !response2.status().is_success() {
-            println!("error {:?}", response2.text().await?);
-        } else {
-            // retry broadcast
-            println!("error {:?}", response2.text().await?);
-        }
+            match response.code {
+                None => {
+                    match response.data {
+                        None => {
+                            let data: Vec<u8> = Vec::new();
+                            return Ok(data);
+                        },
+                        Some(data) => {
+                            // self.bluzelle_account.sequence += 1;
+                            return Ok(hex::decode(data)?);
+                        }
+        
+                    }
+                },
+                Some(code) => {
+                    // if response.raw_log.contains("signature verification failed") {
+                    //     self.broadcast_retries += 1;
+                    //     return;
+                    // }
 
-        Ok(true)
+                }
+
+            }
+
+            panic!(response.raw_log)
     }
 
     pub async fn sign(&self, fee: TxFee, memo: String, msg: Vec<TxMsg>) -> Result<TxSig, Error> {
-        let mut sign_data = TxSigHashPayload::default();
+        let mut sign_data = TxBroadcastRequest::default();
         sign_data.account_number = self.bluzelle_account.account_number.to_string();
         sign_data.chain_id = self.chain_id.clone();
         sign_data.fee = fee;
@@ -252,11 +359,11 @@ impl Client {
         sign_data.msgs = msg;
         sign_data.sequence = self.bluzelle_account.sequence.to_string();
         //
-        println!("##^^^^^^^^^^^^^>{}", serde_json::to_string(&sign_data)?);
+        info!("##^^^^^^^^^^^^^>{}", serde_json::to_string(&sign_data)?);
         let mut hasher = Sha256::new();
         hasher.input(serde_json::to_string(&sign_data)?);
         let hash = hasher.result();
-        println!("##^^^^^^^^^^^^^>{}", hex::encode(&hash));
+        info!("##^^^^^^^^^^^^^>{}", hex::encode(&hash));
         let message = secp256k1::Message::from_slice(&hash)?;
 
         let mut pub_key = TxSigPubKey::default();
@@ -275,9 +382,9 @@ impl Client {
         // reverse_grapheme_clusters_in_place(&mut ry);
         // reverse_grapheme_clusters_in_place(&mut sy);
         let ss = &format!("{}{}", ry, sy);
-        println!("#########>{:?}", &ss);
+        info!("#########>{:?}", &ss);
         let sig = base64::encode(&hex::decode(ss)?);
-        println!("--->{:?}", &sig);
+        info!("--->{:?}", &sig);
         //
         let mut tx_sig = TxSig::default();
         tx_sig.pub_key = pub_key;
@@ -317,7 +424,6 @@ pub async fn new_client(
     endpoint: String,
     chain_id: String,
     uuid: String,
-    debug: bool,
 ) -> Result<Client, Error> {
     let mut client = Client::default();
     client.mnemonic = mnemonic.clone();
