@@ -80,6 +80,16 @@ pub struct Account {
 }
 
 #[derive(Default, Deserialize, Debug)]
+pub struct VersionResponse {
+    application_version: VersionResponseApplicationVersion,
+}
+
+#[derive(Default, Deserialize, Debug)]
+pub struct VersionResponseApplicationVersion {
+    version: String,
+}
+
+#[derive(Default, Deserialize, Debug)]
 pub struct Coin {
     pub denom: String,
     pub amount: String,
@@ -243,15 +253,53 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn create(&self, key: String, value: String, gas_info: GasInfo, lease_info: LeaseInfo) -> Result<bool, Error> {
+    pub async fn account(&self) -> Result<Account, Error> {
+        let response: AccountResponse =
+            reqwest::get(&format!("{}/auth/accounts/{}", self.endpoint, self.address))
+                .await?
+                .json()
+                .await?;
+        Ok(response.result.value)
+    }
+
+    pub async fn version(&self) -> Result<String, Error> {
+        let response: VersionResponse =
+            reqwest::get(&format!("{}/node_info", self.endpoint))
+                .await?
+                .json()
+                .await?;
+        Ok(response.application_version.version)
+    }
+
+    //
+
+    pub async fn create(&self, key: &str, value: &str, gas_info: GasInfo, lease_info: LeaseInfo) -> Result<bool, Error> {
         let mut tx = TxValidateRequest::default();
-        tx.key = key;
+        tx.key = String::from(key);
         tx.lease = lease_info.to_blocks().to_string();
-        tx.value = value;
+        tx.value = String::from(value);
         //
         self.tx(String::from("POST"), String::from("/crud/create"), &mut tx, gas_info).await?;
         Ok(true)
     }
+
+    //
+
+    pub async fn read(&self, key: &str) -> Result<String, Error> {
+        let response = reqwest::get(&format!(
+            "{}/crud/read/{}/{}",
+            self.endpoint, self.uuid, key
+        ))
+        .await?
+        .text()
+        .await?;
+        //
+        let response_json = json::parse(&response)?;
+        //
+        Ok(format!("{}", response_json["result"]["value"]))
+    }
+
+    //
 
     pub async fn tx_read(&self, key: String, gas_info: GasInfo) -> Result<String, Error> {
         let mut tx = TxValidateRequest::default();
@@ -261,6 +309,8 @@ impl Client {
         let value: String = serde_json::from_slice(&response)?;
         Ok(value)
     }
+
+    //
 
     pub async fn tx(&self, method: String, endpoint: String, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
         // self.broadcast_retries = 0;
@@ -393,29 +443,6 @@ impl Client {
         tx_sig.sequence = self.bluzelle_account.sequence.to_string();
 
         Ok(tx_sig)
-    }
-
-    pub async fn read(&self, key: &str) -> Result<String, Error> {
-        let response = reqwest::get(&format!(
-            "{}/crud/read/{}/{}",
-            self.endpoint, self.uuid, key
-        ))
-        .await?
-        .text()
-        .await?;
-        //
-        let response_json = json::parse(&response)?;
-        //
-        Ok(format!("{}", response_json["result"]["value"]))
-    }
-
-    pub async fn account(&self) -> Result<Account, Error> {
-        let response: AccountResponse =
-            reqwest::get(&format!("{}/auth/accounts/{}", self.endpoint, self.address))
-                .await?
-                .json()
-                .await?;
-        Ok(response.result.value)
     }
 }
 

@@ -32,17 +32,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let lease_info = bluzelle::LeaseInfo::default();
 
-    // info!("account");
-    // let account = client.account().await?;
-    // info!("account({:?})", account);
+    info!("account");
+    let account = client.account().await?;
+    info!("account({:?})", account);
 
-    info!("creating key({})", key.clone());
-    client.create(key.clone(), value, gas_info.clone(), lease_info).await?;
+    info!("creating key({})", key);
+    client.create(&key, &value, gas_info.clone(), lease_info).await?;
     info!("created key({})", key.clone());
 
-    // info!("reading key({})", key);
-    // let value2 = client.read(key).await?;
-    // info!("read key({}) value({:?})", key, value2);
+    info!("reading key({})", key);
+    let read_value = client.read(&key).await?;
+    info!("read key({}) value({:?})", key, read_value);
 
     Ok(())
 }
@@ -51,12 +51,5 @@ fn read_env(key: String) -> String {
     match env::var(key) {
         Ok(val) => val,
         Err(_e) => String::from(""),
-    }
-}
-
-fn read_env_bool(key: String) -> bool {
-    match env::var(key) {
-        Ok(_val) => true,
-        Err(_e) => false,
     }
 }
