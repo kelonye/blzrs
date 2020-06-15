@@ -1,5 +1,4 @@
 extern crate base64;
-extern crate failure;
 extern crate hex;
 extern crate reqwest;
 extern crate secp256k1;
@@ -8,15 +7,15 @@ extern crate sha2;
 extern crate bip39;
 // extern crate bech32;
 extern crate ripemd160;
-#[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+#[macro_use] extern crate log;
 
 // use failure;
 use failure::Error;
-use json;
 use sha2::{Digest, Sha256};
 use hdwallet::{KeyChain, DefaultKeyChain, ExtendedPrivKey, ExtendedPubKey};
+use serde_derive::{Serialize, Deserialize};
 // use std::fmt;
 // use std::fs::File;
 // use std::io;
@@ -61,6 +60,11 @@ const BLOCK_TIME_IN_SECONDS: u64 = 5;
 //
 
 #[derive(Default, Deserialize, Debug)]
+pub struct ErrorResponse {
+    error: String,
+}
+
+#[derive(Default, Deserialize, Debug)]
 pub struct AccountResponse {
     result: AccountResponseResult,
 }
@@ -70,13 +74,20 @@ pub struct AccountResponseResult {
     value: Account,
 }
 
-#[derive(Default, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Account {
     pub account_number: u64,
     pub address: String,
     pub coins: Vec<Coin>,
     pub public_key: String,
     pub sequence: u64,
+}
+
+
+#[derive(Default, Serialize, Deserialize, Debug)]
+pub struct Coin {
+    pub denom: String,
+    pub amount: String,
 }
 
 #[derive(Default, Deserialize, Debug)]
@@ -89,10 +100,17 @@ pub struct VersionResponseApplicationVersion {
     version: String,
 }
 
-#[derive(Default, Deserialize, Debug)]
-pub struct Coin {
-    pub denom: String,
-    pub amount: String,
+
+//
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct ReadResponse {
+    result: ReadResponseResult,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct ReadResponseResult {
+    value: String,
 }
 
 //
@@ -273,30 +291,26 @@ impl Client {
 
     //
 
-    pub async fn create(&self, key: &str, value: &str, gas_info: GasInfo, lease_info: LeaseInfo) -> Result<bool, Error> {
+    pub async fn create(&self, key: &str, value: &str, gas_info: GasInfo, lease_info: LeaseInfo) -> Result<(), Error> {
         let mut tx = TxValidateRequest::default();
         tx.key = String::from(key);
         tx.lease = lease_info.to_blocks().to_string();
         tx.value = String::from(value);
         //
         self.tx(String::from("POST"), String::from("/crud/create"), &mut tx, gas_info).await?;
-        Ok(true)
+        Ok(())
     }
 
     //
 
     pub async fn read(&self, key: &str) -> Result<String, Error> {
-        let response = reqwest::get(&format!(
-            "{}/crud/read/{}/{}",
-            self.endpoint, self.uuid, key
-        ))
-        .await?
-        .text()
-        .await?;
-        //
-        let response_json = json::parse(&response)?;
-        //
-        Ok(format!("{}", response_json["result"]["value"]))
+        let path = &format!("/crud/read/{}/{}", self.uuid, key);
+        let text = self.query(path).await?;
+        let ok_response: ReadResponse = match serde_json::from_str(&text) {
+            Ok(res) => res,
+            Err(_) => return Ok(text)
+        };
+        Ok(ok_response.result.value)
     }
 
     //
@@ -311,6 +325,20 @@ impl Client {
     }
 
     //
+
+    pub async fn query(&self, path: &str) -> Result<String, Error> {
+        let response = reqwest::get(&format!(
+            "{}{}",
+            self.endpoint, path
+        ))
+        .await?;
+        let text = response.text().await?;
+        let error_response: ErrorResponse = match serde_json::from_str(&text) {
+            Ok(res) => res,
+            Err(_) => return Ok(text)
+        };
+        Ok(error_response.error)
+    }
 
     pub async fn tx(&self, method: String, endpoint: String, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
         // self.broadcast_retries = 0;

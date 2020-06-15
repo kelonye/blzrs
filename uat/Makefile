@@ -1,5 +1,4 @@
-uat:
+example:
 	@cargo run
 
-.PHONY: uat
-	
+.PHONY: example

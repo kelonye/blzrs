@@ -6,4 +6,13 @@ edition = "2018"
 
 [dependencies]
 bluzelle = { path = "../bluzelle" }
+dotenv = "*"
 tokio = { version = "0.2", features = ["full"] }
+pretty_env_logger = "*"
+log = "*"
+warp = "0.2"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+json = "*"
+failure = "*"
