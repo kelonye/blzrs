@@ -5,7 +5,7 @@ mod util;
 // util
 
 #[tokio::test]
-async fn account() -> Result<(), Error> {
+async fn test_account() -> Result<(), Error> {
     let client = util::new_client().await?;
     let account = client.account().await?;
     println!("sequence: {}", account.sequence);
@@ -15,7 +15,7 @@ async fn account() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn version() -> Result<(), Error> {
+async fn test_version() -> Result<(), Error> {
     let client = util::new_client().await?;
     let version = client.version().await?;
     assert!(version != "");
@@ -25,8 +25,8 @@ async fn version() -> Result<(), Error> {
 // tx
 
 #[tokio::test]
-async fn create_key_with_no_lease_info() -> Result<(), Error> {
-    let client = util::new_client().await?;
+async fn test_create_key_with_no_lease_info() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
     let key = util::random_string()?;
     let val = util::random_string()?;
     client.create(&key, &val, util::gas_info(), Some(bluzelle::LeaseInfo::default())).await?;
@@ -36,8 +36,8 @@ async fn create_key_with_no_lease_info() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn creates_key_with_lease_info() -> Result<(), Error> {
-    let client = util::new_client().await?;
+async fn test_creates_key_with_lease_info() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
     let key = util::random_string()?;
     let val = util::random_string()?;
     client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
@@ -47,11 +47,11 @@ async fn creates_key_with_lease_info() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn creates_key_validates_gas_info() -> Result<(), Error> {
+async fn test_creates_key_validates_gas_info() -> Result<(), Error> {
     let mut gas_info = bluzelle::GasInfo::default();
     gas_info.max_fee = Some(1);
 
-    let client = util::new_client().await?;
+    let mut client = util::new_client().await?;
     let key = util::random_string()?;
     let val = util::random_string()?;
 
@@ -62,8 +62,8 @@ async fn creates_key_validates_gas_info() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn creates_key_with_symbols() -> Result<(), Error> {
-    let client = util::new_client().await?;
+async fn test_creates_key_with_symbols() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
     let key = util::random_string()? + " !\"#$%&'()*+,-.0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
     let val = util::random_string()?;
     client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
@@ -81,8 +81,8 @@ async fn creates_key_with_symbols() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn create_fails_if_key_contains_hash() -> Result<(), Error> {
-    let client = util::new_client().await?;
+async fn test_create_fails_if_key_contains_hash() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
     let key = "123/";
     let val = util::random_string()?;
 
@@ -99,37 +99,43 @@ async fn create_fails_if_key_contains_hash() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn update() -> Result<(), Error> {
+async fn test_update() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string()?;
+    client.create(&key, "1", util::gas_info(), util::lease_info()).await?;
+    client.update(&key, "2", util::gas_info(), None).await?;
+    let read_val = client.read(&key).await?;
+    assert_eq!(read_val, "2");
     Ok(())
 }
 
 #[tokio::test]
-async fn delete() -> Result<(), Error> {
+async fn test_delete() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn rename() -> Result<(), Error> {
+async fn test_rename() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn delete_all() -> Result<(), Error> {
+async fn test_delete_all() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn multi_update() -> Result<(), Error> {
+async fn test_multi_update() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn renew_lease() -> Result<(), Error> {
+async fn test_renew_lease() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn renew_all_leases() -> Result<(), Error> {
+async fn test_renew_all_leases() -> Result<(), Error> {
     Ok(())
 }
 
@@ -137,8 +143,8 @@ async fn renew_all_leases() -> Result<(), Error> {
 // query
 
 #[tokio::test]
-async fn read() -> Result<(), Error> {
-    let client = util::new_client().await?;
+async fn test_read() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
     let key = util::random_string()?;
     let val = util::random_string()?;
     client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
@@ -148,68 +154,68 @@ async fn read() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn has() -> Result<(), Error> {
+async fn test_has() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn count() -> Result<(), Error> {
+async fn test_count() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn keys() -> Result<(), Error> {
+async fn test_keys() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn key_values() -> Result<(), Error> {
+async fn test_key_values() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn get_lease() -> Result<(), Error> {
+async fn test_get_lease() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn get_n_shortest_leases() -> Result<(), Error> {
+async fn test_get_n_shortest_leases() -> Result<(), Error> {
     Ok(())
 }
 
 // tx query
 
 #[tokio::test]
-async fn tx_read() -> Result<(), Error> {
+async fn test_tx_read() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn tx_has() -> Result<(), Error> {
+async fn test_tx_has() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn tx_count() -> Result<(), Error> {
+async fn test_tx_count() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn tx_keys() -> Result<(), Error> {
+async fn test_tx_keys() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn tx_key_values() -> Result<(), Error> {
+async fn test_tx_key_values() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn tx_get_lease() -> Result<(), Error> {
+async fn test_tx_get_lease() -> Result<(), Error> {
     Ok(())
 }
 
 #[tokio::test]
-async fn tx_get_n_shortest_leases() -> Result<(), Error> {
+async fn test_tx_get_n_shortest_leases() -> Result<(), Error> {
     Ok(())
 }

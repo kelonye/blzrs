@@ -50,7 +50,7 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
     let chain_id = read_env(String::from("CHAIN_ID"));
     let uuid = read_env(String::from("UUID"));
 
-    let client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
+    let mut client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
 
     match req.method.as_str() {
         "account" => {
@@ -61,24 +61,41 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             let version = client.version().await?;
             Ok(warp::reply::json(&version))
         },
+        // tx
         "create" => { 
             let key: String = serde_json::from_value(req.args[0].clone())?;
             let val: String = serde_json::from_value(req.args[1].clone())?;
 
-            let mut gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[2].clone())?;
-            let lease_info: bluzelle::LeaseInfo = match serde_json::from_value(req.args[3].clone()) {
-                Ok(l) => l,
-                Err(_) => bluzelle::LeaseInfo::default()
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[2].clone())?;
+            let lease_info: Option<bluzelle::LeaseInfo> = match serde_json::from_value(req.args[3].clone()) {
+                Ok(l) => Some(l),
+                Err(_) => None
             };
 
-            client.create(&String::from(key), &String::from(val), gas_info, Some(lease_info)).await?;
+            client.create(&String::from(key), &String::from(val), gas_info, lease_info).await?;
             Ok(warp::reply::json(&String::from("nil")))
         },
+        "update" => { 
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let val: String = serde_json::from_value(req.args[1].clone())?;
+
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[2].clone())?;
+            let lease_info: Option<bluzelle::LeaseInfo> = match serde_json::from_value(req.args[3].clone()) {
+                Ok(l) => Some(l),
+                Err(_) => None
+            };
+
+            client.update(&String::from(key), &String::from(val), gas_info, lease_info).await?;
+            Ok(warp::reply::json(&String::from("nil")))
+        },
+        // query
         "read" => {
             let key: String = serde_json::from_value(req.args[0].clone())?;
             let val = client.read(&String::from(&key)).await?;
             Ok(warp::reply::json(&val))
         },
+        // tx query
+        //
         _ => {
             Ok(warp::reply::json(&String::from("unknown method")))
         }

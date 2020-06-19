@@ -113,15 +113,15 @@ pub struct TxValidateRequest {
     #[serde(rename = "BaseReq")]
     base_req: TxValidateRequestBaseReq,
     #[serde(rename = "Key")]
-    key: String,
+    key: Option<String>,
     #[serde(rename = "Lease")]
-    lease: String,
+    lease: Option<String>,
     #[serde(rename = "Owner")]
     owner: String,
     #[serde(rename = "UUID")]
     uuid: String,
     #[serde(rename = "Value")]
-    value: String,
+    value: Option<String>,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
@@ -166,15 +166,15 @@ pub struct TxMsg {
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct TxMsgValue {
     #[serde(rename = "Key")]
-    key: String,
+    key: Option<String>,
     #[serde(rename = "Lease")]
-    lease: String,
+    lease: Option<String>,
     #[serde(rename = "Owner")]
     owner: String,
     #[serde(rename = "UUID")]
     uuid: String,
     #[serde(rename = "Value")]
-    value: String,
+    value: Option<String>,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
@@ -299,7 +299,7 @@ impl Client {
 
     //
 
-    pub async fn create(&self, key: &str, value: &str, gas_info: GasInfo, lease_info: Option<LeaseInfo>) -> Result<(), Error> {
+    pub async fn create(&mut self, key: &str, value: &str, gas_info: GasInfo, lease_info: Option<LeaseInfo>) -> Result<(), Error> {
         if key.is_empty() {
             return Err(err_msg(KEY_IS_REQUIRED));
         }
@@ -316,11 +316,38 @@ impl Client {
         }
 
         let mut tx = TxValidateRequest::default();
-        tx.key = String::from(key);
-        tx.lease = lease.to_string();
-        tx.value = String::from(value);
+        tx.key = Some(String::from(key));
+        tx.lease = Some(lease.to_string());
+        tx.value = Some(String::from(value));
         //
         self.tx(String::from("POST"), String::from("/crud/create"), &mut tx, gas_info).await?;
+        Ok(())
+    }
+
+    pub async fn update(&mut self, key: &str, value: &str, gas_info: GasInfo, lease_info: Option<LeaseInfo>) -> Result<(), Error> {
+        if key.is_empty() {
+            return Err(err_msg(KEY_IS_REQUIRED));
+        }
+        validate_key(key)?;
+        if value.is_empty() {
+            return Err(err_msg(VALUE_IS_REQUIRED));
+        }
+
+        let mut tx = TxValidateRequest::default();
+        tx.key = Some(String::from(key));
+  
+        if let Some(li) = lease_info {
+            let lease: i64 = li.to_blocks();
+            if lease < 0 {
+                return Err(err_msg(INVALID_LEASE_TIME))
+            } else {
+                tx.lease = Some(lease.to_string());
+            }
+        }
+
+        tx.value = Some(String::from(value));
+        //
+        self.tx(String::from("POST"), String::from("/crud/update"), &mut tx, gas_info).await?;
         Ok(())
     }
 
@@ -378,9 +405,9 @@ impl Client {
 
     //
 
-    pub async fn tx_read(&self, key: String, gas_info: GasInfo) -> Result<String, Error> {
+    pub async fn tx_read(&mut self, key: String, gas_info: GasInfo) -> Result<String, Error> {
         let mut tx = TxValidateRequest::default();
-        tx.key = key;
+        tx.key = Some(key);
         //
         let response = self.tx(String::from("POST"), String::from("/crud/read"), &mut tx, gas_info).await?;
         let value: String = serde_json::from_slice(&response)?;
@@ -403,7 +430,7 @@ impl Client {
         Ok(error_response.error)
     }
 
-    pub async fn tx(&self, method: String, endpoint: String, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
+    pub async fn tx(&mut self, method: String, endpoint: String, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
         // self.broadcast_retries = 0;
         let mut response = self.tx_validate(method, endpoint, tx).await?;
         self.tx_broadcast(&mut response.value, gas_info).await
@@ -429,7 +456,7 @@ impl Client {
         Ok(response)
     }
 
-    pub async fn tx_broadcast(&self, tx: &mut Tx, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
+    pub async fn tx_broadcast(&mut self, tx: &mut Tx, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
         // let mut tx  = Tx::default();
         // tx.msg = txn.value.msg;
         // tx.fee = txn.value.fee;
@@ -500,13 +527,13 @@ impl Client {
 
         match response.code {
             None => {
+                self.bluzelle_account.sequence += 1;
                 match response.data {
                     None => {
                         let data: Vec<u8> = Vec::new();
                         return Ok(data);
                     },
                     Some(data) => {
-                        // self.bluzelle_account.sequence += 1;
                         return Ok(hex::decode(data)?);
                     }
     
