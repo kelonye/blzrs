@@ -40,11 +40,12 @@ pub fn random_string() -> Result<String, Error> {
 
 pub fn gas_info() -> bluzelle::GasInfo {
     let mut gas_info = bluzelle::GasInfo::default();
-    gas_info.max_fee = 4000001;
+    gas_info.max_fee = Some(4_000_001);
     gas_info
 }
 
-pub fn lease_info() -> bluzelle::LeaseInfo {
-    let lease_info = bluzelle::LeaseInfo::default();
-    lease_info
+pub fn lease_info() -> Option<bluzelle::LeaseInfo> {
+    let mut lease_info = bluzelle::LeaseInfo::default();
+    lease_info.seconds = Some(100);
+    Some(lease_info)
 }

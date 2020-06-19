@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let value = String::from("value");
 
     let mut gas_info = bluzelle::GasInfo::default();
-    gas_info.max_fee = 4000001;
+    gas_info.max_fee = Some(4_000_001);
 
     let lease_info = bluzelle::LeaseInfo::default();
 
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("account({:?})", account);
 
     info!("creating key({})", key);
-    client.create(&key, &value, gas_info.clone(), lease_info).await?;
+    client.create(&key, &value, gas_info, Some(lease_info)).await?;
     info!("created key({})", key.clone());
 
     info!("reading key({})", key);

@@ -65,11 +65,13 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             let key: String = serde_json::from_value(req.args[0].clone())?;
             let val: String = serde_json::from_value(req.args[1].clone())?;
 
-            let mut gas_info = bluzelle::GasInfo::default();
-            gas_info.max_fee = 4000001;
-            let lease_info = bluzelle::LeaseInfo::default();
+            let mut gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[2].clone())?;
+            let lease_info: bluzelle::LeaseInfo = match serde_json::from_value(req.args[3].clone()) {
+                Ok(l) => l,
+                Err(_) => bluzelle::LeaseInfo::default()
+            };
 
-            client.create(&String::from(key), &String::from(val), gas_info, lease_info).await?;
+            client.create(&String::from(key), &String::from(val), gas_info, Some(lease_info)).await?;
             Ok(warp::reply::json(&String::from("nil")))
         },
         "read" => {

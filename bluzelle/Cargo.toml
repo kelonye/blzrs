@@ -23,3 +23,4 @@ log = "*"
 dotenv = "*"
 pretty_env_logger = "*"
 tokio = { version = "0.2", features = ["full"] }
+rand = "*"
