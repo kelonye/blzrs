@@ -98,6 +98,16 @@ pub struct ReadResponseResult {
 }
 
 #[derive(Default, Deserialize, Debug, Clone)]
+pub struct HasResponse {
+    result: HasResponseResult,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct HasResponseResult {
+    has: bool,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
 pub struct KeysResponse {
     result: KeysResponseResult,
 }
@@ -108,13 +118,19 @@ pub struct KeysResponseResult {
 }
 
 #[derive(Default, Deserialize, Debug, Clone)]
-pub struct HasResponse {
-    result: HasResponseResult,
+pub struct KeyValuesResponse {
+    result: KeyValuesResponseResult,
 }
 
 #[derive(Default, Deserialize, Debug, Clone)]
-pub struct HasResponseResult {
-    has: bool,
+pub struct KeyValuesResponseResult {
+    keyvalues: Vec<KeyValue>,
+}
+
+#[derive(Default, Deserialize, Serialize, Debug, Clone)]
+pub struct KeyValue {
+    pub key: String,
+    pub value: String,
 }
 
 //
@@ -125,6 +141,8 @@ pub struct TxValidateRequest {
     base_req: TxValidateRequestBaseReq,
     #[serde(rename = "Key", skip_serializing_if = "Option::is_none")]
     key: Option<String>,
+    #[serde(rename = "KeyValues", skip_serializing_if = "Option::is_none")]
+    key_values: Option<Vec<KeyValue>>,
     #[serde(rename = "Lease", skip_serializing_if = "Option::is_none")]
     lease: Option<String>,
     #[serde(rename = "NewKey", skip_serializing_if = "Option::is_none")]
@@ -180,6 +198,8 @@ pub struct TxMsg {
 pub struct TxMsgValue {
     #[serde(rename = "Key", skip_serializing_if = "Option::is_none")]
     key: Option<String>,
+    #[serde(rename = "KeyValues", skip_serializing_if = "Option::is_none")]
+    key_values: Option<Vec<KeyValue>>,
     #[serde(rename = "Lease", skip_serializing_if = "Option::is_none")]
     lease: Option<String>,
     #[serde(rename = "NewKey", skip_serializing_if = "Option::is_none")]
@@ -418,6 +438,28 @@ impl Client {
         Ok(())
     }
 
+    pub async fn multi_update(
+        &mut self,
+        key_values: Vec<KeyValue>,
+        gas_info: GasInfo,
+    ) -> Result<(), Error> {
+        for key_value in key_values.iter() {
+            if key_value.key.is_empty() {
+                return Err(err_msg(KEY_IS_REQUIRED));
+            }
+            validate_key(&key_value.key)?;
+            if key_value.value.is_empty() {
+                return Err(err_msg(VALUE_IS_REQUIRED));
+            }
+        }
+        let mut tx = TxValidateRequest::default();
+        tx.key_values = Some(key_values);
+
+        self.tx("POST", "/crud/multiupdate", &mut tx, gas_info)
+            .await?;
+        Ok(())
+    }
+
     //
 
     pub async fn read(&self, key: &str) -> Result<String, Error> {
@@ -457,14 +499,14 @@ impl Client {
         Ok(ok_response.result.keys)
     }
 
-    pub async fn key_values(&self) -> Result<String, Error> {
+    pub async fn key_values(&self) -> Result<Vec<KeyValue>, Error> {
         let path = &format!("/crud/keyvalues/{}", self.uuid);
         let text = self.query(path).await?;
-        let ok_response: ReadResponse = match serde_json::from_str(&text) {
+        let ok_response: KeyValuesResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(text),
+            Err(_) => return Ok(Vec::new()),
         };
-        Ok(ok_response.result.value)
+        Ok(ok_response.result.keyvalues)
     }
 
     //

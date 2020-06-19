@@ -111,6 +111,12 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             client.delete_all(gas_info).await?;
             Ok(warp::reply::json(&String::from("null")))
         }
+        "multiupdate" => {
+            let key_values: Vec<bluzelle::KeyValue> = serde_json::from_value(req.args[0].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[1].clone())?;
+            client.multi_update(key_values, gas_info).await?;
+            Ok(warp::reply::json(&String::from("null")))
+        }
         // query
         "read" => {
             let key: String = serde_json::from_value(req.args[0].clone())?;
@@ -121,6 +127,15 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             let key: String = serde_json::from_value(req.args[0].clone())?;
             let has = client.has(&String::from(&key)).await?;
             Ok(warp::reply::json(&has))
+        }
+        "keys" => {
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let keys = client.keys().await?;
+            Ok(warp::reply::json(&keys))
+        }
+        "keyvalues" => {
+            let key_values = client.key_values().await?;
+            Ok(warp::reply::json(&key_values))
         }
         // tx query
         //

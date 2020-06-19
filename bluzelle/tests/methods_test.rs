@@ -172,7 +172,6 @@ async fn test_delete_all() -> Result<(), Error> {
         .create(&key, &val, util::gas_info(), util::lease_info())
         .await?;
     assert!(client.keys().await?.len() != 0);
-
     client.delete_all(util::gas_info()).await?;
     assert_eq!(client.keys().await?.len(), 0);
     Ok(())
@@ -180,6 +179,20 @@ async fn test_delete_all() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_multi_update() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+
+    client
+        .create(&key, "1", util::gas_info(), util::lease_info())
+        .await?;
+    util::assert_key_value(client.key_values().await?, &key, "1")?;
+    let mut key_value = bluzelle::KeyValue::default();
+    key_value.key = String::from(&key);
+    key_value.value = String::from("2");
+    let mut key_values: Vec<bluzelle::KeyValue> = Vec::new();
+    key_values.push(key_value);
+    client.multi_update(key_values, util::gas_info()).await?;
+    util::assert_key_value(client.key_values().await?, &key, "2")?;
     Ok(())
 }
 

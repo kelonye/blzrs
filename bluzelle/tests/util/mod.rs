@@ -3,7 +3,7 @@ extern crate pretty_env_logger;
 
 use bluzelle;
 use dotenv::dotenv;
-use failure::Error;
+use failure::{err_msg, Error};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::env;
@@ -49,4 +49,17 @@ pub fn lease_info() -> Option<bluzelle::LeaseInfo> {
     let mut lease_info = bluzelle::LeaseInfo::default();
     lease_info.seconds = Some(100);
     Some(lease_info)
+}
+
+pub fn assert_key_value(
+    key_values: Vec<bluzelle::KeyValue>,
+    key: &str,
+    value: &str,
+) -> Result<(), Error> {
+    for key_value in key_values {
+        if key_value.key == key && key_value.value == value {
+            return Ok(());
+        }
+    }
+    Err(err_msg("key_value not found in key_values"))
 }
