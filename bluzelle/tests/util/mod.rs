@@ -40,7 +40,8 @@ pub fn random_string() -> String {
 
 pub fn gas_info() -> bluzelle::GasInfo {
     let mut gas_info = bluzelle::GasInfo::default();
-    gas_info.max_fee = Some(4_000_001);
+    gas_info.max_fee = Some(4_000_000);
+    gas_info.max_gas = Some(400_000);
     gas_info
 }
 

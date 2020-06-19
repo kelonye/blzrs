@@ -164,6 +164,17 @@ async fn test_rename() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_delete_all() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    assert!(client.keys().await?.len() != 0);
+
+    client.delete_all(util::gas_info()).await?;
+    assert_eq!(client.keys().await?.len(), 0);
     Ok(())
 }
 

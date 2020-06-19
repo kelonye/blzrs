@@ -411,6 +411,13 @@ impl Client {
         Ok(())
     }
 
+    pub async fn delete_all(&mut self, gas_info: GasInfo) -> Result<(), Error> {
+        let mut tx = TxValidateRequest::default();
+        self.tx("POST", "/crud/deleteall", &mut tx, gas_info)
+            .await?;
+        Ok(())
+    }
+
     //
 
     pub async fn read(&self, key: &str) -> Result<String, Error> {
@@ -567,9 +574,13 @@ impl Client {
         if let Some(a) = gas_info.gas_price {
             gas_price = a;
         }
-        if max_gas != 0 && gas > max_gas {
+        //
+        if max_gas != 0 {
             gas = max_gas;
         }
+        // if max_gas != 0 && gas > max_gas {
+        //     gas = max_gas;
+        // }
         if max_fee != 0 {
             amount = max_fee;
         } else if gas_price != 0 {
