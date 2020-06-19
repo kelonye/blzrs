@@ -94,6 +94,14 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             client.delete(&String::from(key), gas_info).await?;
             Ok(warp::reply::json(&String::from("null")))
         },
+        "rename" => { 
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let new_key: String = serde_json::from_value(req.args[1].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[2].clone())?;
+ 
+            client.rename(&String::from(key), &String::from(new_key), gas_info).await?;
+            Ok(warp::reply::json(&String::from("null")))
+        },
         // query
         "read" => {
             let key: String = serde_json::from_value(req.args[0].clone())?;

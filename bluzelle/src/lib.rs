@@ -1,29 +1,31 @@
 extern crate base64;
+extern crate bip39;
 extern crate hex;
 extern crate reqwest;
 extern crate secp256k1;
 extern crate serde;
 extern crate sha2;
-extern crate bip39;
 // extern crate bech32;
 extern crate ripemd160;
 extern crate serde_derive;
 extern crate serde_json;
-#[macro_use] extern crate log;
-#[macro_use] extern crate failure;
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate failure;
 
-use failure::{Error, err_msg};
+use failure::{err_msg, Error};
+use hdwallet::{DefaultKeyChain, ExtendedPrivKey, ExtendedPubKey, KeyChain};
+use serde_derive::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use hdwallet::{KeyChain, DefaultKeyChain, ExtendedPrivKey, ExtendedPubKey};
-use serde_derive::{Serialize, Deserialize};
 // use std::fmt;
 // use std::fs::File;
 // use std::io;
-use rand::{thread_rng, Rng};
-use rand::distributions::Alphanumeric;
 use bech32::{self, FromBase32, ToBase32};
-use ripemd160::{Ripemd160};
-use log::{info,warn,error};
+use log::{error, info, warn};
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+use ripemd160::Ripemd160;
 
 const TOKEN_NAME: &str = "ubnt";
 const PUB_KEY_TYPE: &str = "tendermint/PubKeySecp256k1";
@@ -66,7 +68,6 @@ pub struct Account {
     pub public_key: String,
     pub sequence: u64,
 }
-
 
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Coin {
@@ -122,15 +123,17 @@ pub struct HasResponseResult {
 pub struct TxValidateRequest {
     #[serde(rename = "BaseReq")]
     base_req: TxValidateRequestBaseReq,
-    #[serde(rename = "Key")]
+    #[serde(rename = "Key", skip_serializing_if = "Option::is_none")]
     key: Option<String>,
-    #[serde(rename = "Lease")]
+    #[serde(rename = "Lease", skip_serializing_if = "Option::is_none")]
     lease: Option<String>,
+    #[serde(rename = "NewKey", skip_serializing_if = "Option::is_none")]
+    new_key: Option<String>,
     #[serde(rename = "Owner")]
     owner: String,
     #[serde(rename = "UUID")]
     uuid: String,
-    #[serde(rename = "Value")]
+    #[serde(rename = "Value", skip_serializing_if = "Option::is_none")]
     value: Option<String>,
 }
 
@@ -175,15 +178,17 @@ pub struct TxMsg {
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct TxMsgValue {
-    #[serde(rename = "Key")]
+    #[serde(rename = "Key", skip_serializing_if = "Option::is_none")]
     key: Option<String>,
-    #[serde(rename = "Lease")]
+    #[serde(rename = "Lease", skip_serializing_if = "Option::is_none")]
     lease: Option<String>,
+    #[serde(rename = "NewKey", skip_serializing_if = "Option::is_none")]
+    new_key: Option<String>,
     #[serde(rename = "Owner")]
     owner: String,
     #[serde(rename = "UUID")]
     uuid: String,
-    #[serde(rename = "Value")]
+    #[serde(rename = "Value", skip_serializing_if = "Option::is_none")]
     value: Option<String>,
 }
 
@@ -214,13 +219,13 @@ pub struct TxBroadcastRequest {
 
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct TxBroadcastResponse {
-	height: String,
-	txhash: String,
-	data: Option<String>,
-	codespace: Option<String>,
-	code: Option<u8>,
-	raw_log: String,
-	gas_wanted: String,
+    height: String,
+    txhash: String,
+    data: Option<String>,
+    codespace: Option<String>,
+    code: Option<u8>,
+    raw_log: String,
+    gas_wanted: String,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, Copy)]
@@ -245,10 +250,9 @@ pub struct LeaseInfo {
     pub seconds: Option<i64>,
 }
 
-
 impl LeaseInfo {
     fn to_blocks(&self) -> i64 {
-        let mut seconds  = 0;
+        let mut seconds = 0;
         if let Some(d) = self.days {
             seconds += d * 24 * 60 * 60;
         }
@@ -299,17 +303,22 @@ impl Client {
     }
 
     pub async fn version(&self) -> Result<String, Error> {
-        let response: VersionResponse =
-            reqwest::get(&format!("{}/node_info", self.endpoint))
-                .await?
-                .json()
-                .await?;
+        let response: VersionResponse = reqwest::get(&format!("{}/node_info", self.endpoint))
+            .await?
+            .json()
+            .await?;
         Ok(response.application_version.version)
     }
 
     //
 
-    pub async fn create(&mut self, key: &str, value: &str, gas_info: GasInfo, lease_info: Option<LeaseInfo>) -> Result<(), Error> {
+    pub async fn create(
+        &mut self,
+        key: &str,
+        value: &str,
+        gas_info: GasInfo,
+        lease_info: Option<LeaseInfo>,
+    ) -> Result<(), Error> {
         if key.is_empty() {
             return Err(err_msg(KEY_IS_REQUIRED));
         }
@@ -322,7 +331,7 @@ impl Client {
             lease = li.to_blocks();
         }
         if lease < 0 {
-            return Err(err_msg(INVALID_LEASE_TIME))
+            return Err(err_msg(INVALID_LEASE_TIME));
         }
 
         let mut tx = TxValidateRequest::default();
@@ -334,7 +343,13 @@ impl Client {
         Ok(())
     }
 
-    pub async fn update(&mut self, key: &str, value: &str, gas_info: GasInfo, lease_info: Option<LeaseInfo>) -> Result<(), Error> {
+    pub async fn update(
+        &mut self,
+        key: &str,
+        value: &str,
+        gas_info: GasInfo,
+        lease_info: Option<LeaseInfo>,
+    ) -> Result<(), Error> {
         if key.is_empty() {
             return Err(err_msg(KEY_IS_REQUIRED));
         }
@@ -345,18 +360,16 @@ impl Client {
 
         let mut tx = TxValidateRequest::default();
         tx.key = Some(String::from(key));
-  
         if let Some(li) = lease_info {
             let lease: i64 = li.to_blocks();
             if lease < 0 {
-                return Err(err_msg(INVALID_LEASE_TIME))
+                return Err(err_msg(INVALID_LEASE_TIME));
             } else {
                 tx.lease = Some(lease.to_string());
             }
         }
 
         tx.value = Some(String::from(value));
- 
         self.tx("POST", "/crud/update", &mut tx, gas_info).await?;
         Ok(())
     }
@@ -374,6 +387,30 @@ impl Client {
         Ok(())
     }
 
+    pub async fn rename(
+        &mut self,
+        key: &str,
+        new_key: &str,
+        gas_info: GasInfo,
+    ) -> Result<(), Error> {
+        if key.is_empty() {
+            return Err(err_msg(KEY_IS_REQUIRED));
+        }
+        validate_key(key)?;
+
+        if new_key.is_empty() {
+            return Err(err_msg(NEW_KEY_IS_REQUIRED));
+        }
+        validate_key(new_key)?;
+
+        let mut tx = TxValidateRequest::default();
+        tx.key = Some(String::from(key));
+        tx.new_key = Some(String::from(new_key));
+
+        self.tx("POST", "/crud/rename", &mut tx, gas_info).await?;
+        Ok(())
+    }
+
     //
 
     pub async fn read(&self, key: &str) -> Result<String, Error> {
@@ -381,7 +418,7 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: ReadResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(text)
+            Err(_) => return Ok(text),
         };
         Ok(ok_response.result.value)
     }
@@ -398,7 +435,7 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: ReadResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(text)
+            Err(_) => return Ok(text),
         };
         Ok(ok_response.result.value)
     }
@@ -408,7 +445,7 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: KeysResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(Vec::new())
+            Err(_) => return Ok(Vec::new()),
         };
         Ok(ok_response.result.keys)
     }
@@ -418,7 +455,7 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: ReadResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(text)
+            Err(_) => return Ok(text),
         };
         Ok(ok_response.result.value)
     }
@@ -437,27 +474,37 @@ impl Client {
     //
 
     pub async fn query(&self, path: &str) -> Result<String, Error> {
-        let response = reqwest::get(&format!(
-            "{}{}",
-            self.endpoint, path
-        ))
-        .await?;
+        let url = format!("{}{}", self.endpoint, path);
+        info!("query: {}", url);
+        let response = reqwest::get(&url).await?;
         let text = response.text().await?;
         let error_response: ErrorResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(text)
+            Err(_) => return Ok(text),
         };
         Ok(error_response.error)
     }
 
-    pub async fn tx(&mut self, method: &str, endpoint: &str, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
+    pub async fn tx(
+        &mut self,
+        method: &str,
+        endpoint: &str,
+        tx: &mut TxValidateRequest,
+        gas_info: GasInfo,
+    ) -> Result<Vec<u8>, Error> {
+        info!("tx: {} {}", method, endpoint);
         // self.broadcast_retries = 0;
         let mut response = self.tx_validate(method, endpoint, tx).await?;
         self.tx_broadcast(&mut response.value, gas_info).await
     }
 
-    pub async fn tx_validate(&self, method: &str, endpoint: &str, tx: &mut TxValidateRequest) -> Result<TxValidateResponse, Error> {
-        tx.base_req = TxValidateRequestBaseReq{
+    pub async fn tx_validate(
+        &self,
+        method: &str,
+        endpoint: &str,
+        tx: &mut TxValidateRequest,
+    ) -> Result<TxValidateResponse, Error> {
+        tx.base_req = TxValidateRequestBaseReq {
             chain_id: self.chain_id.to_string(),
             from: self.address.to_string(),
         };
@@ -465,7 +512,7 @@ impl Client {
         tx.uuid = self.uuid.to_string();
         let body = serde_json::to_string(&tx)?;
         let url = format!("{}/{}", self.endpoint, endpoint);
-        info!("validate: {} {} {}", method, url, body.clone());
+        info!("tx validate: {} {} {}", method, url, body.clone());
         let response: TxValidateResponse = match method {
             "DELETE" => {
                 reqwest::Client::new()
@@ -475,7 +522,7 @@ impl Client {
                     .await?
                     .json()
                     .await?
-            },
+            }
             _ => {
                 reqwest::Client::new()
                     .post(&url)
@@ -514,7 +561,7 @@ impl Client {
         if let Some(a) = gas_info.max_gas {
             max_gas = a;
         }
-        if let Some(a) = gas_info.max_fee  {
+        if let Some(a) = gas_info.max_fee {
             max_fee = a;
         }
         if let Some(a) = gas_info.gas_price {
@@ -549,7 +596,7 @@ impl Client {
         //
         let body = serde_json::to_string(&tx_request)?;
         let url = format!("{}/txs", self.endpoint);
-        info!("broadcast: POST {} {}", url, body.clone());
+        info!("tx broadcast: POST {} {}", url, body.clone());
         let response: TxBroadcastResponse = reqwest::Client::new()
             .post(&url)
             .body(body.clone())
@@ -565,13 +612,12 @@ impl Client {
                     None => {
                         let data: Vec<u8> = Vec::new();
                         return Ok(data);
-                    },
+                    }
                     Some(data) => {
                         return Ok(hex::decode(data)?);
                     }
-    
                 }
-            },
+            }
             Some(code) => {
                 // if response.raw_log.contains("signature verification failed") {
                 //     self.broadcast_retries += 1;
@@ -583,7 +629,6 @@ impl Client {
                 return Err(err_msg(response.raw_log));
             }
         };
-
     }
 
     pub async fn sign(&self, fee: &TxFee, memo: &str, msg: &Vec<TxMsg>) -> Result<TxSig, Error> {
@@ -693,13 +738,10 @@ fn derive_private_key(seed: &[u8]) -> Result<ExtendedPrivKey, hdwallet::error::E
 }
 
 fn rand_string(len: usize) -> String {
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(len)
-        .collect()
+    thread_rng().sample_iter(&Alphanumeric).take(len).collect()
 }
 
-fn validate_key(key: &str) -> Result<(), Error>{
+fn validate_key(key: &str) -> Result<(), Error> {
     if key.contains("/") {
         Err(err_msg(KEY_CANNOT_CONTAIN_A_SLASH))
     } else {

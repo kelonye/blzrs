@@ -1,4 +1,4 @@
-use failure::{Error, err_msg};
+use failure::{err_msg, Error};
 
 mod util;
 
@@ -8,7 +8,6 @@ mod util;
 async fn test_account() -> Result<(), Error> {
     let client = util::new_client().await?;
     let account = client.account().await?;
-    println!("sequence: {}", account.sequence);
     assert!(account.sequence != 0);
     assert!(account.account_number != 0);
     Ok(())
@@ -27,22 +26,29 @@ async fn test_version() -> Result<(), Error> {
 #[tokio::test]
 async fn test_create_key_with_no_lease_info() -> Result<(), Error> {
     let mut client = util::new_client().await?;
-    let key = util::random_string()?;
-    let val = util::random_string()?;
-    client.create(&key, &val, util::gas_info(), Some(bluzelle::LeaseInfo::default())).await?;
-    let read_val = client.read(&key).await?;
-    assert_eq!(val, read_val);
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(
+            &key,
+            &val,
+            util::gas_info(),
+            Some(bluzelle::LeaseInfo::default()),
+        )
+        .await?;
+    assert_eq!(client.read(&key).await?, val);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_creates_key_with_lease_info() -> Result<(), Error> {
     let mut client = util::new_client().await?;
-    let key = util::random_string()?;
-    let val = util::random_string()?;
-    client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
-    let read_val = client.read(&key).await?;
-    assert_eq!(val, read_val);
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    assert_eq!(client.read(&key).await?, val);
     Ok(())
 }
 
@@ -52,21 +58,26 @@ async fn test_creates_key_validates_gas_info() -> Result<(), Error> {
     gas_info.max_fee = Some(1);
 
     let mut client = util::new_client().await?;
-    let key = util::random_string()?;
-    let val = util::random_string()?;
+    let key = util::random_string();
+    let val = util::random_string();
 
-    match client.create(&key, &val, gas_info, util::lease_info()).await {
+    match client
+        .create(&key, &val, gas_info, util::lease_info())
+        .await
+    {
         Ok(_) => Err(err_msg("did not raise error")),
-        Err(_) => Ok(())
+        Err(_) => Ok(()),
     }
 }
 
 #[tokio::test]
 async fn test_creates_key_with_symbols() -> Result<(), Error> {
     let mut client = util::new_client().await?;
-    let key = util::random_string()? + " !\"#$%&'()*+,-.0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
-    let val = util::random_string()?;
-    client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
+    let key = util::random_string() + " !\"#$%&'()*+,-.0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+    let val = util::random_string();
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
     match client.keys().await {
         Err(e) => Err(e),
         Ok(keys) => {
@@ -75,7 +86,10 @@ async fn test_creates_key_with_symbols() -> Result<(), Error> {
                     return Ok(());
                 }
             }
-            Err(err_msg(format!("key({}) was not found in ({:?})", key, keys)))
+            Err(err_msg(format!(
+                "key({}) was not found in ({:?})",
+                key, keys
+            )))
         }
     }
 }
@@ -84,9 +98,12 @@ async fn test_creates_key_with_symbols() -> Result<(), Error> {
 async fn test_create_fails_if_key_contains_hash() -> Result<(), Error> {
     let mut client = util::new_client().await?;
     let key = "123/";
-    let val = util::random_string()?;
+    let val = util::random_string();
 
-    match client.create(&key, &val, util::gas_info(), util::lease_info()).await {
+    match client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await
+    {
         Ok(_) => Ok(()),
         Err(e) => {
             if e.to_string().contains("Key cannot contain a slash") {
@@ -94,26 +111,29 @@ async fn test_create_fails_if_key_contains_hash() -> Result<(), Error> {
             } else {
                 Err(err_msg("error was not raised"))
             }
-        },
+        }
     }
 }
 
 #[tokio::test]
 async fn test_update() -> Result<(), Error> {
     let mut client = util::new_client().await?;
-    let key = util::random_string()?;
-    client.create(&key, "1", util::gas_info(), util::lease_info()).await?;
+    let key = util::random_string();
+    client
+        .create(&key, "1", util::gas_info(), util::lease_info())
+        .await?;
     client.update(&key, "2", util::gas_info(), None).await?;
-    let read_val = client.read(&key).await?;
-    assert_eq!(read_val, "2");
+    assert_eq!(client.read(&key).await?, "2");
     Ok(())
 }
 
 #[tokio::test]
 async fn test_delete() -> Result<(), Error> {
-    let key = util::random_string()?;
+    let key = util::random_string();
     let mut client = util::new_client().await?;
-    client.create(&key, "1", util::gas_info(), util::lease_info()).await?;
+    client
+        .create(&key, "1", util::gas_info(), util::lease_info())
+        .await?;
     client.delete(&key, util::gas_info()).await?;
     assert!(client.has(&key).await?);
     Ok(())
@@ -121,6 +141,24 @@ async fn test_delete() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_rename() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let new_key = util::random_string();
+    let val = util::random_string();
+
+    assert!(!client.has(&key).await?);
+    assert!(!client.has(&new_key).await?);
+
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    assert!(client.has(&key).await?);
+    assert!(!client.has(&new_key).await?);
+
+    client.rename(&key, &new_key, util::gas_info()).await?;
+    assert!(!client.has(&key).await?);
+    assert!(client.has(&new_key).await?);
+    assert_eq!(client.read(&new_key).await?, val);
     Ok(())
 }
 
@@ -144,15 +182,16 @@ async fn test_renew_all_leases() -> Result<(), Error> {
     Ok(())
 }
 
-
 // query
 
 #[tokio::test]
 async fn test_read() -> Result<(), Error> {
     let mut client = util::new_client().await?;
-    let key = util::random_string()?;
-    let val = util::random_string()?;
-    client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
     let read_val = client.read(&key).await?;
     assert_eq!(val, read_val);
     Ok(())
@@ -161,10 +200,12 @@ async fn test_read() -> Result<(), Error> {
 #[tokio::test]
 async fn test_has() -> Result<(), Error> {
     let mut client = util::new_client().await?;
-    let key = util::random_string()?;
-    let val = util::random_string()?;
+    let key = util::random_string();
+    let val = util::random_string();
     assert!(!client.has(&key).await?);
-    client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
     assert!(client.has(&key).await?);
     Ok(())
 }

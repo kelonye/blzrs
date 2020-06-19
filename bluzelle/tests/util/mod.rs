@@ -1,12 +1,13 @@
 extern crate pretty_env_logger;
 // #[macro_use] extern crate log;
 
-use std::sync::Once;
 use bluzelle;
 use dotenv::dotenv;
-use std::env;
 use failure::Error;
-use std::time::{SystemTime, UNIX_EPOCH};
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+use std::env;
+use std::sync::Once;
 
 static INIT: Once = Once::new();
 
@@ -32,10 +33,9 @@ fn read_env(key: String) -> String {
     }
 }
 
-pub fn random_string() -> Result<String, Error> {
-    let now = SystemTime::now();
-    let since_the_epoch = now.duration_since(UNIX_EPOCH)?;
-    Ok(format!("rust-{}", since_the_epoch.as_secs()))
+pub fn random_string() -> String {
+    let s: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
+    format!("rust-{}", s)
 }
 
 pub fn gas_info() -> bluzelle::GasInfo {
