@@ -73,7 +73,7 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             };
 
             client.create(&String::from(key), &String::from(val), gas_info, lease_info).await?;
-            Ok(warp::reply::json(&String::from("nil")))
+            Ok(warp::reply::json(&String::from("null")))
         },
         "update" => { 
             let key: String = serde_json::from_value(req.args[0].clone())?;
@@ -86,13 +86,24 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             };
 
             client.update(&String::from(key), &String::from(val), gas_info, lease_info).await?;
-            Ok(warp::reply::json(&String::from("nil")))
+            Ok(warp::reply::json(&String::from("null")))
+        },
+        "delete" => { 
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[0].clone())?;
+            client.delete(&String::from(key), gas_info).await?;
+            Ok(warp::reply::json(&String::from("null")))
         },
         // query
         "read" => {
             let key: String = serde_json::from_value(req.args[0].clone())?;
             let val = client.read(&String::from(&key)).await?;
             Ok(warp::reply::json(&val))
+        },
+        "has" => {
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let has = client.has(&String::from(&key)).await?;
+            Ok(warp::reply::json(&has))
         },
         // tx query
         //

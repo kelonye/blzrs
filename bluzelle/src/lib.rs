@@ -106,6 +106,16 @@ pub struct KeysResponseResult {
     keys: Vec<String>,
 }
 
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct HasResponse {
+    result: HasResponseResult,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct HasResponseResult {
+    has: bool,
+}
+
 //
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
@@ -319,8 +329,8 @@ impl Client {
         tx.key = Some(String::from(key));
         tx.lease = Some(lease.to_string());
         tx.value = Some(String::from(value));
-        //
-        self.tx(String::from("POST"), String::from("/crud/create"), &mut tx, gas_info).await?;
+
+        self.tx("POST", "/crud/create", &mut tx, gas_info).await?;
         Ok(())
     }
 
@@ -346,8 +356,21 @@ impl Client {
         }
 
         tx.value = Some(String::from(value));
-        //
-        self.tx(String::from("POST"), String::from("/crud/update"), &mut tx, gas_info).await?;
+ 
+        self.tx("POST", "/crud/update", &mut tx, gas_info).await?;
+        Ok(())
+    }
+
+    pub async fn delete(&mut self, key: &str, gas_info: GasInfo) -> Result<(), Error> {
+        if key.is_empty() {
+            return Err(err_msg(KEY_IS_REQUIRED));
+        }
+        validate_key(key)?;
+
+        let mut tx = TxValidateRequest::default();
+        tx.key = Some(String::from(key));
+
+        self.tx("DELETE", "/crud/delete", &mut tx, gas_info).await?;
         Ok(())
     }
 
@@ -363,14 +386,11 @@ impl Client {
         Ok(ok_response.result.value)
     }
 
-    pub async fn has(&self, key: &str) -> Result<String, Error> {
-        let path = &format!("/crud/read/{}/{}", self.uuid, key);
+    pub async fn has(&self, key: &str) -> Result<bool, Error> {
+        let path = &format!("/crud/has/{}/{}", self.uuid, key);
         let text = self.query(path).await?;
-        let ok_response: ReadResponse = match serde_json::from_str(&text) {
-            Ok(res) => res,
-            Err(_) => return Ok(text)
-        };
-        Ok(ok_response.result.value)
+        let ok_response: HasResponse = serde_json::from_str(&text)?;
+        Ok(ok_response.result.has)
     }
 
     pub async fn count(&self, key: &str) -> Result<String, Error> {
@@ -405,11 +425,11 @@ impl Client {
 
     //
 
-    pub async fn tx_read(&mut self, key: String, gas_info: GasInfo) -> Result<String, Error> {
+    pub async fn tx_read(&mut self, key: &str, gas_info: GasInfo) -> Result<String, Error> {
         let mut tx = TxValidateRequest::default();
-        tx.key = Some(key);
+        tx.key = Some(key.to_string());
         //
-        let response = self.tx(String::from("POST"), String::from("/crud/read"), &mut tx, gas_info).await?;
+        let response = self.tx("POST", "/crud/read", &mut tx, gas_info).await?;
         let value: String = serde_json::from_slice(&response)?;
         Ok(value)
     }
@@ -430,13 +450,13 @@ impl Client {
         Ok(error_response.error)
     }
 
-    pub async fn tx(&mut self, method: String, endpoint: String, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
+    pub async fn tx(&mut self, method: &str, endpoint: &str, tx: &mut TxValidateRequest, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
         // self.broadcast_retries = 0;
         let mut response = self.tx_validate(method, endpoint, tx).await?;
         self.tx_broadcast(&mut response.value, gas_info).await
     }
 
-    pub async fn tx_validate(&self, method: String, endpoint: String, tx: &mut TxValidateRequest) -> Result<TxValidateResponse, Error> {
+    pub async fn tx_validate(&self, method: &str, endpoint: &str, tx: &mut TxValidateRequest) -> Result<TxValidateResponse, Error> {
         tx.base_req = TxValidateRequestBaseReq{
             chain_id: self.chain_id.to_string(),
             from: self.address.to_string(),
@@ -446,13 +466,26 @@ impl Client {
         let body = serde_json::to_string(&tx)?;
         let url = format!("{}/{}", self.endpoint, endpoint);
         info!("validate: {} {} {}", method, url, body.clone());
-        let response: TxValidateResponse = reqwest::Client::new()
-            .post(&url)
-            .body(body.clone())
-            .send()
-            .await?
-            .json()
-            .await?;
+        let response: TxValidateResponse = match method {
+            "DELETE" => {
+                reqwest::Client::new()
+                    .delete(&url)
+                    .body(body.clone())
+                    .send()
+                    .await?
+                    .json()
+                    .await?
+            },
+            _ => {
+                reqwest::Client::new()
+                    .post(&url)
+                    .body(body.clone())
+                    .send()
+                    .await?
+                    .json()
+                    .await?
+            }
+        };
         Ok(response)
     }
 
@@ -516,7 +549,7 @@ impl Client {
         //
         let body = serde_json::to_string(&tx_request)?;
         let url = format!("{}/txs", self.endpoint);
-        info!("broadcast: post {} {}", url, body.clone());
+        info!("broadcast: POST {} {}", url, body.clone());
         let response: TxBroadcastResponse = reqwest::Client::new()
             .post(&url)
             .body(body.clone())

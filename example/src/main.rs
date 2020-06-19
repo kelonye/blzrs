@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let chain_id = read_env(String::from("CHAIN_ID"));
     let uuid = read_env(String::from("UUID"));
 
-    let client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
+    let mut client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
 
     let now = SystemTime::now();
     let since_the_epoch = now.duration_since(UNIX_EPOCH)?;

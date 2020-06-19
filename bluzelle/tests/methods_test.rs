@@ -111,6 +111,11 @@ async fn test_update() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_delete() -> Result<(), Error> {
+    let key = util::random_string()?;
+    let mut client = util::new_client().await?;
+    client.create(&key, "1", util::gas_info(), util::lease_info()).await?;
+    client.delete(&key, util::gas_info()).await?;
+    assert!(client.has(&key).await?);
     Ok(())
 }
 
@@ -155,6 +160,12 @@ async fn test_read() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_has() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string()?;
+    let val = util::random_string()?;
+    assert!(!client.has(&key).await?);
+    client.create(&key, &val, util::gas_info(), util::lease_info()).await?;
+    assert!(client.has(&key).await?);
     Ok(())
 }
 
