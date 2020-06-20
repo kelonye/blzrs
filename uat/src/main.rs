@@ -151,8 +151,11 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             let has = client.has(&String::from(&key)).await?;
             Ok(warp::reply::json(&has))
         }
+        "count" => {
+            let count = client.count().await?;
+            Ok(warp::reply::json(&count))
+        }
         "keys" => {
-            let key: String = serde_json::from_value(req.args[0].clone())?;
             let keys = client.keys().await?;
             Ok(warp::reply::json(&keys))
         }

@@ -252,6 +252,14 @@ async fn test_has() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_count() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    let count = client.count().await?;
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    assert_eq!(client.count().await?, count + 1);
     Ok(())
 }
 

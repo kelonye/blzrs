@@ -108,6 +108,16 @@ pub struct HasResponseResult {
 }
 
 #[derive(Default, Deserialize, Debug, Clone)]
+pub struct CountResponse {
+    result: CountResponseResult,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct CountResponseResult {
+    count: String,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
 pub struct KeysResponse {
     result: KeysResponseResult,
 }
@@ -533,14 +543,15 @@ impl Client {
         Ok(ok_response.result.has)
     }
 
-    pub async fn count(&self, key: &str) -> Result<String, Error> {
-        let path = &format!("/crud/read/{}/{}", self.uuid, key);
+    pub async fn count(&self) -> Result<usize, Error> {
+        let path = &format!("/crud/count/{}", self.uuid);
         let text = self.query(path).await?;
-        let ok_response: ReadResponse = match serde_json::from_str(&text) {
+        let ok_response: CountResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(text),
+            Err(_) => return Ok(0),
         };
-        Ok(ok_response.result.value)
+        let count: usize = ok_response.result.count.parse()?;
+        Ok(count)
     }
 
     pub async fn keys(&self) -> Result<Vec<String>, Error> {
