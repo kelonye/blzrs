@@ -198,11 +198,27 @@ async fn test_multi_update() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_renew_lease() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    client
+        .create(&key, "1", util::gas_info(), util::lease_info())
+        .await?;
+    client
+        .renew_lease(&key, util::gas_info(), util::lease_info())
+        .await?;
     Ok(())
 }
 
 #[tokio::test]
 async fn test_renew_all_leases() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    client
+        .create(&key, "1", util::gas_info(), util::lease_info())
+        .await?;
+    client
+        .renew_lease_all(util::gas_info(), util::lease_info())
+        .await?;
     Ok(())
 }
 

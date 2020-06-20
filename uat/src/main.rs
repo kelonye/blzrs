@@ -117,6 +117,29 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             client.multi_update(key_values, gas_info).await?;
             Ok(warp::reply::json(&String::from("null")))
         }
+        "renew_lease" => {
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[1].clone())?;
+            let lease_info: Option<bluzelle::LeaseInfo> =
+                match serde_json::from_value(req.args[2].clone()) {
+                    Ok(l) => Some(l),
+                    Err(_) => None,
+                };
+            client
+                .renew_lease(&String::from(key), gas_info, lease_info)
+                .await?;
+            Ok(warp::reply::json(&String::from("null")))
+        }
+        "renew_lease_all" => {
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[0].clone())?;
+            let lease_info: Option<bluzelle::LeaseInfo> =
+                match serde_json::from_value(req.args[1].clone()) {
+                    Ok(l) => Some(l),
+                    Err(_) => None,
+                };
+            client.renew_lease_all(gas_info, lease_info).await?;
+            Ok(warp::reply::json(&String::from("null")))
+        }
         // query
         "read" => {
             let key: String = serde_json::from_value(req.args[0].clone())?;

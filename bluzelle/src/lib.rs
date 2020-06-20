@@ -460,6 +460,60 @@ impl Client {
         Ok(())
     }
 
+    pub async fn renew_lease(
+        &mut self,
+        key: &str,
+        gas_info: GasInfo,
+        lease_info: Option<LeaseInfo>,
+    ) -> Result<(), Error> {
+        if key.is_empty() {
+            return Err(err_msg(KEY_IS_REQUIRED));
+        }
+        validate_key(key)?;
+
+        let mut tx = TxValidateRequest::default();
+        tx.key = Some(String::from(key));
+        if let Some(li) = lease_info {
+            let lease: i64 = li.to_blocks();
+            if lease < 0 {
+                return Err(err_msg(INVALID_LEASE_TIME));
+            } else {
+                tx.lease = Some(lease.to_string());
+            }
+        }
+
+        self.tx("POST", "/crud/renewlease", &mut tx, gas_info)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn renew_lease_all(
+        &mut self,
+        gas_info: GasInfo,
+        lease_info: Option<LeaseInfo>,
+    ) -> Result<(), Error> {
+        let mut tx = TxValidateRequest::default();
+        if let Some(li) = lease_info {
+            let lease: i64 = li.to_blocks();
+            if lease < 0 {
+                return Err(err_msg(INVALID_LEASE_TIME));
+            } else {
+                tx.lease = Some(lease.to_string());
+            }
+        }
+        self.tx("POST", "/crud/renewleaseall", &mut tx, gas_info)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn renew_all_leases(
+        &mut self,
+        gas_info: GasInfo,
+        lease_info: Option<LeaseInfo>,
+    ) -> Result<(), Error> {
+        self.renew_lease_all(gas_info, lease_info).await
+    }
+
     //
 
     pub async fn read(&self, key: &str) -> Result<String, Error> {
