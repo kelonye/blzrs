@@ -4,9 +4,9 @@ extern crate hex;
 extern crate reqwest;
 extern crate secp256k1;
 extern crate serde;
-extern crate sha2;
+// extern crate sha2;
 // extern crate bech32;
-extern crate ripemd160;
+// extern crate ripemd160;
 extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
@@ -14,19 +14,17 @@ extern crate log;
 #[macro_use]
 extern crate failure;
 
-use failure::{err_msg, Error};
-use hdwallet::{DefaultKeyChain, ExtendedPrivKey, ExtendedPubKey, KeyChain};
-use serde_derive::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-// use std::fmt;
-// use std::fs::File;
-// use std::io;
 use async_recursion::async_recursion;
 use bech32::{self, FromBase32, ToBase32};
+use failure::{err_msg, Error};
+use hdwallet::{DefaultKeyChain, ExtendedPrivKey, ExtendedPubKey, KeyChain};
 use log::{error, info, warn};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use ripemd160::Ripemd160;
+use serde_derive::{Deserialize, Serialize};
+// use regex::Regex;
+use bitcoin_hashes;
+use bitcoin_hashes::{Hash, HashEngine};
 use std::{thread, time};
 
 const TOKEN_NAME: &str = "ubnt";
@@ -946,9 +944,7 @@ impl Client {
         sign_data.sequence = self.bluzelle_account.sequence.to_string();
         //
         let sign_data_string = serde_json::to_string(&sign_data)?;
-        let mut hasher = Sha256::new();
-        hasher.input(sanitize_string(&sign_data_string));
-        let hash = hasher.result();
+        let hash = sha256(sanitize_string(&sign_data_string).as_bytes());
         let message = secp256k1::Message::from_slice(&hash)?;
 
         let mut pub_key = TxSigPubKey::default();
@@ -1033,13 +1029,8 @@ fn derive_address(mnemonic_word: &str) -> Result<(String, String, String), Error
     let public_key_bytes = public_extended_key.public_key.serialize().to_vec();
     let public_key_base_64 = base64::encode(&public_key_bytes);
 
-    let mut s_hasher = Sha256::new();
-    s_hasher.input(public_key_bytes);
-    let s = s_hasher.result();
-
-    let mut r_hasher = Ripemd160::new();
-    r_hasher.input(s);
-    let r = r_hasher.result();
+    let s = sha256(&public_key_bytes[..]);
+    let r = ripemd160(&s[..]);
 
     let address = bech32::encode(ADDRESS_PREFIX, r.to_base32())?;
 
@@ -1065,12 +1056,37 @@ fn validate_key(key: &str) -> Result<(), Error> {
     }
 }
 
-fn encode_safe_string(s: &str) -> &str {
-    s
+fn encode_safe_string(s: &str) -> String {
+    String::from(s)
 }
 
-fn sanitize_string(s: &str) -> &str {
-    s
+fn sanitize_string(s: &str) -> String {
+    // let r = Regex::new(r"[&<>]").unwrap();
+    // let f = r.replace_all(s, |token| format!("\\u00{}", hex::encode(token)));
+    // String::from(f)
+
+    s.chars()
+        .map(|x| match x {
+            '&' => sanitize_string_token(&x.to_string()),
+            '<' => sanitize_string_token(&x.to_string()),
+            '>' => sanitize_string_token(&x.to_string()),
+            _ => x.to_string(),
+        })
+        .collect()
+}
+
+fn sanitize_string_token(s: &str) -> String {
+    format!("\\u00{}", hex::encode(s))
+}
+
+fn sha256(s: &[u8]) -> Vec<u8> {
+    let hash = bitcoin_hashes::sha256::Hash::hash(s);
+    hash.to_vec()
+}
+
+fn ripemd160(s: &[u8]) -> Vec<u8> {
+    let hash = bitcoin_hashes::ripemd160::Hash::hash(s);
+    hash.to_vec()
 }
 
 #[cfg(test)]
