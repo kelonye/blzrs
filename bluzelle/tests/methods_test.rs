@@ -289,12 +289,39 @@ async fn test_key_values() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_get_lease() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(
+            &key,
+            &val,
+            util::gas_info(),
+            Some(bluzelle::LeaseInfo::default()),
+        )
+        .await?;
+    assert!(client.get_lease(&key).await? > 0);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_get_n_shortest_leases() -> Result<(), Error> {
-    Ok(())
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    let mut lease_info = bluzelle::LeaseInfo::default();
+    lease_info.seconds = Some(2);
+    client
+        .create(&key, &val, util::gas_info(), Some(lease_info))
+        .await?;
+    let kls = client.get_n_shortest_leases(10 as u64).await?;
+    for kl in kls {
+        if kl.key == key {
+            assert!(kl.lease > 0);
+            return Ok(());
+        }
+    }
+    Err(err_msg("key not added in get_n_shortest_leases"))
 }
 
 // tx query

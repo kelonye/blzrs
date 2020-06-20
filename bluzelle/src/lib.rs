@@ -35,7 +35,7 @@ const HD_PATH: &str = "m/44'/118'/0'/0/0";
 const ADDRESS_PREFIX: &str = "bluzelle";
 const BROADCAST_MAX_RETRIES: u64 = 10;
 // const BROADCAST_RETRY_INTERVAL = time.Second;
-const BLOCK_TIME_IN_SECONDS: i64 = 5;
+const BLOCK_TIME_IN_SECONDS: u64 = 5;
 
 const KEY_IS_REQUIRED: &str = "Key is required";
 const VALUE_IS_REQUIRED: &str = "Value is required";
@@ -141,6 +141,54 @@ pub struct KeyValuesResponseResult {
 pub struct KeyValue {
     pub key: String,
     pub value: String,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct GetLeaseResponse {
+    result: GetLeaseResponseResult,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct GetLeaseResponseResult {
+    lease: String,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct GetNShortestLeasesResponse {
+    result: GetNShortestLeasesResponseResult,
+}
+
+#[derive(Default, Deserialize, Debug, Clone)]
+pub struct GetNShortestLeasesResponseResult {
+    keyleases: Vec<KeyLease>,
+}
+
+impl GetNShortestLeasesResponseResult {
+    pub fn get_humanized_key_leases(
+        &self,
+    ) -> Result<Vec<GetNShortestLeasesResponseResultKeyLease>, Error> {
+        let mut ret: Vec<GetNShortestLeasesResponseResultKeyLease> = Vec::new();
+        for kl in self.keyleases.iter() {
+            let lease: u64 = kl.lease.parse()?;
+            let mut gkl = GetNShortestLeasesResponseResultKeyLease::default();
+            gkl.key = String::from(kl.key.clone());
+            gkl.lease = lease * BLOCK_TIME_IN_SECONDS;
+            ret.push(gkl);
+        }
+        Ok(ret)
+    }
+}
+
+#[derive(Default, Deserialize, Serialize, Debug, Clone)]
+pub struct GetNShortestLeasesResponseResultKeyLease {
+    pub key: String,
+    pub lease: u64,
+}
+
+#[derive(Default, Deserialize, Serialize, Debug, Clone)]
+pub struct KeyLease {
+    pub key: String,
+    pub lease: String,
 }
 
 //
@@ -295,7 +343,7 @@ impl LeaseInfo {
         if let Some(s) = self.seconds {
             seconds += s;
         }
-        seconds / BLOCK_TIME_IN_SECONDS
+        seconds / (BLOCK_TIME_IN_SECONDS as i64)
     }
 }
 
@@ -531,7 +579,7 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: ReadResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(text),
+            Err(_) => return Err(err_msg(text)),
         };
         Ok(ok_response.result.value)
     }
@@ -548,7 +596,7 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: CountResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(0),
+            Err(_) => return Err(err_msg(text)),
         };
         let count: usize = ok_response.result.count.parse()?;
         Ok(count)
@@ -559,7 +607,7 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: KeysResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(Vec::new()),
+            Err(_) => return Err(err_msg(text)),
         };
         Ok(ok_response.result.keys)
     }
@@ -569,9 +617,34 @@ impl Client {
         let text = self.query(path).await?;
         let ok_response: KeyValuesResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
-            Err(_) => return Ok(Vec::new()),
+            Err(_) => return Err(err_msg(text)),
         };
         Ok(ok_response.result.keyvalues)
+    }
+
+    pub async fn get_lease(&self, key: &str) -> Result<u64, Error> {
+        let path = &format!("/crud/getlease/{}/{}", self.uuid, key);
+        let text = self.query(path).await?;
+        let ok_response: GetLeaseResponse = match serde_json::from_str(&text) {
+            Ok(res) => res,
+            Err(_) => return Err(err_msg(text)),
+        };
+        let lease: u64 = ok_response.result.lease.parse()?;
+        Ok(lease / BLOCK_TIME_IN_SECONDS)
+    }
+
+    pub async fn get_n_shortest_leases(
+        &self,
+        n: u64,
+    ) -> Result<Vec<GetNShortestLeasesResponseResultKeyLease>, Error> {
+        let path = &format!("/crud/getnshortestleases/{}/{}", self.uuid, n);
+        let text = self.query(path).await?;
+        let ok_response: GetNShortestLeasesResponse = match serde_json::from_str(&text) {
+            Ok(res) => res,
+            Err(_) => return Err(err_msg(text)),
+        };
+        let kls = ok_response.result.get_humanized_key_leases()?;
+        Ok(kls)
     }
 
     //

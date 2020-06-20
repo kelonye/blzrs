@@ -163,6 +163,16 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             let key_values = client.key_values().await?;
             Ok(warp::reply::json(&key_values))
         }
+        "get_lease" => {
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let lease = client.get_lease(&String::from(key)).await?;
+            Ok(warp::reply::json(&lease))
+        }
+        "get_n_shortest_leases" => {
+            let n: u64 = serde_json::from_value(req.args[0].clone())?;
+            let kls = client.get_n_shortest_leases(n).await?;
+            Ok(warp::reply::json(&kls))
+        }
         // tx query
         //
         _ => Ok(warp::reply::json(&String::from("unknown method"))),
