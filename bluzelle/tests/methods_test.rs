@@ -328,35 +328,102 @@ async fn test_get_n_shortest_leases() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_tx_read() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    let read_val = client.tx_read(&key, util::gas_info()).await?;
+    assert_eq!(val, read_val);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_tx_has() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    assert!(!client.tx_has(&key, util::gas_info()).await?);
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    assert!(client.tx_has(&key, util::gas_info()).await?);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_tx_count() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    let count = client.tx_count(util::gas_info()).await?;
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    assert_eq!(client.tx_count(util::gas_info()).await?, count + 1);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_tx_keys() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    util::assert_key_in_keys(client.tx_keys(util::gas_info()).await?, &key)?;
     Ok(())
 }
 
 #[tokio::test]
 async fn test_tx_key_values() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(&key, &val, util::gas_info(), util::lease_info())
+        .await?;
+    util::assert_kv_in_kvs(client.tx_key_values(util::gas_info()).await?, &key, &val)?;
     Ok(())
 }
 
 #[tokio::test]
 async fn test_tx_get_lease() -> Result<(), Error> {
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    client
+        .create(
+            &key,
+            &val,
+            util::gas_info(),
+            Some(bluzelle::LeaseInfo::default()),
+        )
+        .await?;
+    assert!(client.tx_get_lease(&key, util::gas_info()).await? > 0);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_tx_get_n_shortest_leases() -> Result<(), Error> {
-    Ok(())
+    let mut client = util::new_client().await?;
+    let key = util::random_string();
+    let val = util::random_string();
+    let mut lease_info = bluzelle::LeaseInfo::default();
+    lease_info.seconds = Some(2);
+    client
+        .create(&key, &val, util::gas_info(), Some(lease_info))
+        .await?;
+    let kls = client
+        .tx_get_n_shortest_leases(10 as u64, util::gas_info())
+        .await?;
+    for kl in kls {
+        if kl.key == key {
+            assert!(kl.lease > 0);
+            return Ok(());
+        }
+    }
+    Err(err_msg("key not added in tx_get_n_shortest_leases"))
 }

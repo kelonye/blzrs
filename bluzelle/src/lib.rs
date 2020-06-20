@@ -203,6 +203,8 @@ pub struct TxValidateRequest {
     key_values: Option<Vec<KeyValue>>,
     #[serde(rename = "Lease", skip_serializing_if = "Option::is_none")]
     lease: Option<String>,
+    #[serde(rename = "N", skip_serializing_if = "Option::is_none")]
+    n: Option<String>,
     #[serde(rename = "NewKey", skip_serializing_if = "Option::is_none")]
     new_key: Option<String>,
     #[serde(rename = "Owner")]
@@ -260,6 +262,8 @@ pub struct TxMsgValue {
     key_values: Option<Vec<KeyValue>>,
     #[serde(rename = "Lease", skip_serializing_if = "Option::is_none")]
     lease: Option<String>,
+    #[serde(rename = "N", skip_serializing_if = "Option::is_none")]
+    n: Option<String>,
     #[serde(rename = "NewKey", skip_serializing_if = "Option::is_none")]
     new_key: Option<String>,
     #[serde(rename = "Owner")]
@@ -647,15 +651,112 @@ impl Client {
         Ok(kls)
     }
 
-    //
+    // tx query
 
     pub async fn tx_read(&mut self, key: &str, gas_info: GasInfo) -> Result<String, Error> {
         let mut tx = TxValidateRequest::default();
         tx.key = Some(key.to_string());
-        //
         let response = self.tx("POST", "/crud/read", &mut tx, gas_info).await?;
-        let value: String = serde_json::from_slice(&response)?;
-        Ok(value)
+        let result: ReadResponseResult = match serde_json::from_slice(&response) {
+            Ok(res) => res,
+            Err(_) => {
+                let err = String::from_utf8(response)?;
+                return Err(err_msg(err));
+            }
+        };
+        Ok(result.value)
+    }
+
+    pub async fn tx_has(&mut self, key: &str, gas_info: GasInfo) -> Result<bool, Error> {
+        let mut tx = TxValidateRequest::default();
+        tx.key = Some(key.to_string());
+        let response = self.tx("POST", "/crud/has", &mut tx, gas_info).await?;
+        let result: HasResponseResult = match serde_json::from_slice(&response) {
+            Ok(res) => res,
+            Err(_) => {
+                let err = String::from_utf8(response)?;
+                return Err(err_msg(err));
+            }
+        };
+        Ok(result.has)
+    }
+
+    pub async fn tx_count(&mut self, gas_info: GasInfo) -> Result<usize, Error> {
+        let mut tx = TxValidateRequest::default();
+        let response = self.tx("POST", "/crud/count", &mut tx, gas_info).await?;
+        let result: CountResponseResult = match serde_json::from_slice(&response) {
+            Ok(res) => res,
+            Err(_) => {
+                let err = String::from_utf8(response)?;
+                return Err(err_msg(err));
+            }
+        };
+        let count: usize = result.count.parse()?;
+        Ok(count)
+    }
+
+    pub async fn tx_keys(&mut self, gas_info: GasInfo) -> Result<Vec<String>, Error> {
+        let mut tx = TxValidateRequest::default();
+        let response = self.tx("POST", "/crud/keys", &mut tx, gas_info).await?;
+        let result: KeysResponseResult = match serde_json::from_slice(&response) {
+            Ok(res) => res,
+            Err(_) => {
+                let err = String::from_utf8(response)?;
+                return Err(err_msg(err));
+            }
+        };
+        Ok(result.keys)
+    }
+
+    pub async fn tx_key_values(&mut self, gas_info: GasInfo) -> Result<Vec<KeyValue>, Error> {
+        let mut tx = TxValidateRequest::default();
+        let response = self
+            .tx("POST", "/crud/keyvalues", &mut tx, gas_info)
+            .await?;
+        let result: KeyValuesResponseResult = match serde_json::from_slice(&response) {
+            Ok(res) => res,
+            Err(_) => {
+                let err = String::from_utf8(response)?;
+                return Err(err_msg(err));
+            }
+        };
+        Ok(result.keyvalues)
+    }
+
+    pub async fn tx_get_lease(&mut self, key: &str, gas_info: GasInfo) -> Result<u64, Error> {
+        let mut tx = TxValidateRequest::default();
+        tx.key = Some(key.to_string());
+        let response = self.tx("POST", "/crud/getlease", &mut tx, gas_info).await?;
+        let result: GetLeaseResponseResult = match serde_json::from_slice(&response) {
+            Ok(res) => res,
+            Err(_) => {
+                let err = String::from_utf8(response)?;
+                return Err(err_msg(err));
+            }
+        };
+        let lease: u64 = result.lease.parse()?;
+        Ok(lease / BLOCK_TIME_IN_SECONDS)
+    }
+
+    pub async fn tx_get_n_shortest_leases(
+        &mut self,
+        n: u64,
+        gas_info: GasInfo,
+    ) -> Result<Vec<GetNShortestLeasesResponseResultKeyLease>, Error> {
+        let mut tx = TxValidateRequest::default();
+        tx.n = Some(n.to_string());
+        let response = self
+            .tx("POST", "/crud/getnshortestleases", &mut tx, gas_info)
+            .await?;
+        let result: GetNShortestLeasesResponseResult = match serde_json::from_slice(&response) {
+            Ok(res) => res,
+            Err(_) => {
+                let err = String::from_utf8(response)?;
+                return Err(err_msg(err));
+            }
+        };
+        let kls = result.get_humanized_key_leases()?;
+        Ok(kls)
     }
 
     //

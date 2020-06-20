@@ -106,12 +106,12 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
                 .await?;
             Ok(warp::reply::json(&String::from("null")))
         }
-        "deleteall" => {
+        "delete_all" => {
             let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[0].clone())?;
             client.delete_all(gas_info).await?;
             Ok(warp::reply::json(&String::from("null")))
         }
-        "multiupdate" => {
+        "multi_update" => {
             let key_values: Vec<bluzelle::KeyValue> = serde_json::from_value(req.args[0].clone())?;
             let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[1].clone())?;
             client.multi_update(key_values, gas_info).await?;
@@ -174,7 +174,45 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
             Ok(warp::reply::json(&kls))
         }
         // tx query
-        //
+        "tx_read" => {
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[1].clone())?;
+            let val = client.tx_read(&String::from(&key), gas_info).await?;
+            Ok(warp::reply::json(&val))
+        }
+        "tx_has" => {
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[1].clone())?;
+            let has = client.tx_has(&String::from(&key), gas_info).await?;
+            Ok(warp::reply::json(&has))
+        }
+        "tx_count" => {
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[0].clone())?;
+            let count = client.tx_count(gas_info).await?;
+            Ok(warp::reply::json(&count))
+        }
+        "tx_keys" => {
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[0].clone())?;
+            let keys = client.tx_keys(gas_info).await?;
+            Ok(warp::reply::json(&keys))
+        }
+        "tx_key_values" => {
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[0].clone())?;
+            let key_values = client.tx_key_values(gas_info).await?;
+            Ok(warp::reply::json(&key_values))
+        }
+        "tx_get_lease" => {
+            let key: String = serde_json::from_value(req.args[0].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[1].clone())?;
+            let lease = client.tx_get_lease(&String::from(key), gas_info).await?;
+            Ok(warp::reply::json(&lease))
+        }
+        "tx_get_n_shortest_leases" => {
+            let n: u64 = serde_json::from_value(req.args[0].clone())?;
+            let gas_info: bluzelle::GasInfo = serde_json::from_value(req.args[1].clone())?;
+            let kls = client.tx_get_n_shortest_leases(n, gas_info).await?;
+            Ok(warp::reply::json(&kls))
+        }
         _ => Ok(warp::reply::json(&String::from("unknown method"))),
     }
 }
