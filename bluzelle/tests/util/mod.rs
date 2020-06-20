@@ -51,7 +51,14 @@ pub fn lease_info() -> Option<bluzelle::LeaseInfo> {
     Some(lease_info)
 }
 
-pub fn assert_key_value(
+pub fn assert_key_in_keys(keys: Vec<String>, key: &str) -> Result<(), Error> {
+    if keys.contains(&String::from(key)) {
+        return Ok(());
+    }
+    Err(err_msg("key_value not found in key_values"))
+}
+
+pub fn assert_kv_in_kvs(
     key_values: Vec<bluzelle::KeyValue>,
     key: &str,
     value: &str,
