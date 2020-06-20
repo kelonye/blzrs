@@ -21,9 +21,9 @@ pub async fn new_client() -> Result<bluzelle::Client, Error> {
     let mnemonic = read_env(String::from("MNEMONIC"));
     let endpoint = read_env(String::from("ENDPOINT"));
     let chain_id = read_env(String::from("CHAIN_ID"));
-    let uuid = read_env(String::from("UUID"));
+    let uuid = random_string();
 
-    bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await
+    bluzelle::new_client(&mnemonic, &endpoint, &chain_id, &uuid).await
 }
 
 fn read_env(key: String) -> String {

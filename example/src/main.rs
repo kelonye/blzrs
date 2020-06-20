@@ -1,7 +1,8 @@
 extern crate bluzelle;
 extern crate dotenv;
 extern crate pretty_env_logger;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 use dotenv::dotenv;
 use std::env;
@@ -20,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let chain_id = read_env(String::from("CHAIN_ID"));
     let uuid = read_env(String::from("UUID"));
 
-    let mut client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
+    let mut client = bluzelle::new_client(&mnemonic, &endpoint, &chain_id, &uuid).await?;
 
     let now = SystemTime::now();
     let since_the_epoch = now.duration_since(UNIX_EPOCH)?;
@@ -37,7 +38,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("account({:?})", account);
 
     info!("creating key({})", key);
-    client.create(&key, &value, gas_info, Some(lease_info)).await?;
+    client
+        .create(&key, &value, gas_info, Some(lease_info))
+        .await?;
     info!("created key({})", key.clone());
 
     info!("reading key({})", key);

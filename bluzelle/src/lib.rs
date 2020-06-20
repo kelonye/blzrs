@@ -21,11 +21,13 @@ use sha2::{Digest, Sha256};
 // use std::fmt;
 // use std::fs::File;
 // use std::io;
+use async_recursion::async_recursion;
 use bech32::{self, FromBase32, ToBase32};
 use log::{error, info, warn};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use ripemd160::Ripemd160;
+use std::{thread, time};
 
 const TOKEN_NAME: &str = "ubnt";
 const PUB_KEY_TYPE: &str = "tendermint/PubKeySecp256k1";
@@ -34,7 +36,7 @@ const DEFAULT_CHAIN_ID: &str = "bluzelle";
 const HD_PATH: &str = "m/44'/118'/0'/0/0";
 const ADDRESS_PREFIX: &str = "bluzelle";
 const BROADCAST_MAX_RETRIES: u64 = 10;
-// const BROADCAST_RETRY_INTERVAL = time.Second;
+const BROADCAST_RETRY_INTERVAL_SECONDS: u64 = 1;
 const BLOCK_TIME_IN_SECONDS: u64 = 5;
 
 const KEY_IS_REQUIRED: &str = "Key is required";
@@ -372,6 +374,7 @@ pub struct Client {
     public_key_base_64: String,
     address: String,
     bluzelle_account: Account,
+    broadcast_retries: u8,
 }
 
 impl Client {
@@ -579,7 +582,17 @@ impl Client {
     //
 
     pub async fn read(&self, key: &str) -> Result<String, Error> {
-        let path = &format!("/crud/read/{}/{}", self.uuid, key);
+        let path = &format!("/crud/read/{}/{}", self.uuid, encode_safe_string(key));
+        let text = self.query(path).await?;
+        let ok_response: ReadResponse = match serde_json::from_str(&text) {
+            Ok(res) => res,
+            Err(_) => return Err(err_msg(text)),
+        };
+        Ok(ok_response.result.value)
+    }
+
+    pub async fn proven_read(&self, key: &str) -> Result<String, Error> {
+        let path = &format!("/crud/pread/{}/{}", self.uuid, encode_safe_string(key));
         let text = self.query(path).await?;
         let ok_response: ReadResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
@@ -589,7 +602,7 @@ impl Client {
     }
 
     pub async fn has(&self, key: &str) -> Result<bool, Error> {
-        let path = &format!("/crud/has/{}/{}", self.uuid, key);
+        let path = &format!("/crud/has/{}/{}", self.uuid, encode_safe_string(key));
         let text = self.query(path).await?;
         let ok_response: HasResponse = serde_json::from_str(&text)?;
         Ok(ok_response.result.has)
@@ -627,7 +640,7 @@ impl Client {
     }
 
     pub async fn get_lease(&self, key: &str) -> Result<u64, Error> {
-        let path = &format!("/crud/getlease/{}/{}", self.uuid, key);
+        let path = &format!("/crud/getlease/{}/{}", self.uuid, encode_safe_string(key));
         let text = self.query(path).await?;
         let ok_response: GetLeaseResponse = match serde_json::from_str(&text) {
             Ok(res) => res,
@@ -781,7 +794,7 @@ impl Client {
         gas_info: GasInfo,
     ) -> Result<Vec<u8>, Error> {
         info!("tx: {} {}", method, endpoint);
-        // self.broadcast_retries = 0;
+        self.broadcast_retries = 0;
         let mut response = self.tx_validate(method, endpoint, tx).await?;
         self.tx_broadcast(&mut response.value, gas_info).await
     }
@@ -824,11 +837,8 @@ impl Client {
         Ok(response)
     }
 
+    #[async_recursion]
     pub async fn tx_broadcast(&mut self, tx: &mut Tx, gas_info: GasInfo) -> Result<Vec<u8>, Error> {
-        // let mut tx  = Tx::default();
-        // tx.msg = txn.value.msg;
-        // tx.fee = txn.value.fee;
-
         // memo
         tx.memo = rand_string(32);
 
@@ -911,13 +921,16 @@ impl Client {
                 }
             }
             Some(code) => {
-                // if response.raw_log.contains("signature verification failed") {
-                //     self.broadcast_retries += 1;
-                //     return;
-                // }
-                //
-                // response.raw_log
-                //
+                if response.raw_log.contains("signature verification failed") {
+                    self.broadcast_retries += 1;
+                    warn!("txn failed ... retrying({}) ...", self.broadcast_retries);
+                    if (self.broadcast_retries as u64) >= BROADCAST_MAX_RETRIES {
+                        return Err(err_msg("txn failed after max retry attempts"));
+                    }
+                    thread::sleep(time::Duration::from_secs(BROADCAST_RETRY_INTERVAL_SECONDS));
+                    self.set_account().await?; // lookup changed sequence
+                    return self.tx_broadcast(tx, gas_info).await;
+                }
                 return Err(err_msg(response.raw_log));
             }
         };
@@ -932,8 +945,9 @@ impl Client {
         sign_data.msgs = (*msg).clone();
         sign_data.sequence = self.bluzelle_account.sequence.to_string();
         //
+        let sign_data_string = serde_json::to_string(&sign_data)?;
         let mut hasher = Sha256::new();
-        hasher.input(serde_json::to_string(&sign_data)?);
+        hasher.input(sanitize_string(&sign_data_string));
         let hash = hasher.result();
         let message = secp256k1::Message::from_slice(&hash)?;
 
@@ -964,31 +978,41 @@ impl Client {
 
         Ok(tx_sig)
     }
+
+    async fn set_account(&mut self) -> Result<(), Error> {
+        self.bluzelle_account = self.account().await?;
+        Ok(())
+    }
 }
 
 pub async fn new_client(
-    mnemonic: String,
-    endpoint: String,
-    chain_id: String,
-    uuid: String,
+    mnemonic: &str,
+    endpoint: &str,
+    chain_id: &str,
+    uuid: &str,
 ) -> Result<Client, Error> {
+    if mnemonic.is_empty() {
+        return Err(err_msg("mnemonic is required"));
+    }
+    if uuid == "" {
+        return Err(err_msg("uuid is required"));
+    }
     let mut client = Client::default();
-    client.mnemonic = mnemonic.clone();
-    client.endpoint = endpoint;
+    client.mnemonic = String::from(mnemonic);
+    client.endpoint = String::from(endpoint);
+    client.chain_id = String::from(chain_id);
+    client.uuid = String::from(uuid);
     if client.endpoint.is_empty() {
         client.endpoint = String::from(DEFAULT_ENDPOINT);
     }
-    client.chain_id = chain_id;
     if client.chain_id.is_empty() {
         client.chain_id = String::from(DEFAULT_CHAIN_ID);
     }
-    client.uuid = uuid;
-
-    let (private_key_hex, public_key_base_64, address) = derive_address(&mnemonic.clone())?;
+    let (private_key_hex, public_key_base_64, address) = derive_address(&mnemonic)?;
     client.address = address;
     client.private_key_hex = private_key_hex;
     client.public_key_base_64 = public_key_base_64;
-    client.bluzelle_account = client.account().await?;
+    client.set_account().await?;
 
     Ok(client)
 }
@@ -1039,6 +1063,14 @@ fn validate_key(key: &str) -> Result<(), Error> {
     } else {
         Ok(())
     }
+}
+
+fn encode_safe_string(s: &str) -> &str {
+    s
+}
+
+fn sanitize_string(s: &str) -> &str {
+    s
 }
 
 #[cfg(test)]

@@ -128,14 +128,14 @@ async fn test_update() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn test_delete() -> Result<(), Error> {
+async fn test_delete_one() -> Result<(), Error> {
     let key = util::random_string();
     let mut client = util::new_client().await?;
     client
         .create(&key, "1", util::gas_info(), util::lease_info())
         .await?;
     client.delete(&key, util::gas_info()).await?;
-    assert!(client.has(&key).await?);
+    assert!(!client.has(&key).await?);
     Ok(())
 }
 

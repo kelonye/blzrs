@@ -20,21 +20,21 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mnemonic = String::from("jelly practice...");
-    let endpoint = String::from("");
-    let chain_id = String::from("");
-    let uuid = String::from("my-app");
-    let debug = false;
+    let mnemonic = "jelly practice...";
+    let endpoint = "http://dev.testnet.public.bluzelle.com:1317";
+    let chain_id = "bluzelle";
+    let uuid = "my-app";
 
-    let client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid, debug).await?;
+    let mut client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
 
-    let key = String::from("key");
-    let value = String::from("value");
+    let key = "key";
+    let value = "value";
 
     let mut gas_info = bluzelle::GasInfo::default();
-    gas_info.max_fee = 4000001;
+    gas_info.max_fee = 4_000_001;
 
-    let lease_info = bluzelle::LeaseInfo::default();
+    let mut lease_info = bluzelle::LeaseInfo::default();
+    lease_info.days = 1;
 
     client.create(key, value, gas_info, lease_info).await?;
     let read_value = client.read(key).await?;
@@ -68,7 +68,7 @@ Configure env as described in the examples section above, and run:
 
 ### User Acceptance Testing
 
-Please checkout the [UAT.md](https://github.com/vbstreetz/blzrs/blob/master/Readme.md) document for more details.
+Please checkout the [UAT.md](https://github.com/vbstreetz/blzrs/blob/master/UAT.md) document for more details.
 
 ### Licence
 

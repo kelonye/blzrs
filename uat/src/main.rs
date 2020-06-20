@@ -9,9 +9,10 @@ use dotenv::dotenv;
 use std::env;
 // use std::error::Error;
 use failure::Error;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use serde_derive::{Deserialize, Serialize};
 use std::convert::Infallible;
-use std::time::{SystemTime, UNIX_EPOCH};
 use warp::http::StatusCode;
 use warp::Filter;
 
@@ -49,9 +50,9 @@ async fn call_api(req: Request) -> Result<warp::reply::Json, Error> {
     let mnemonic = read_env(String::from("MNEMONIC"));
     let endpoint = read_env(String::from("ENDPOINT"));
     let chain_id = read_env(String::from("CHAIN_ID"));
-    let uuid = read_env(String::from("UUID"));
+    let uuid = random_string();
 
-    let mut client = bluzelle::new_client(mnemonic, endpoint, chain_id, uuid).await?;
+    let mut client = bluzelle::new_client(&mnemonic, &endpoint, &chain_id, &uuid).await?;
 
     match req.method.as_str() {
         "account" => {
@@ -232,4 +233,9 @@ fn read_env_number(key: String, default: u16) -> u16 {
         },
         Err(_e) => default,
     }
+}
+
+pub fn random_string() -> String {
+    let s: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
+    format!("rust-{}", s)
 }
