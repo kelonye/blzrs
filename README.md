@@ -55,7 +55,7 @@ cp .env.sample .env
 Then run the example:
 
 ```
-    make example
+make example
 ```
 
 ### Tests
@@ -63,7 +63,7 @@ Then run the example:
 Configure env as described in the examples section above, and run:
 
 ```
-    make test
+make test
 ```
 
 ### User Acceptance Testing
